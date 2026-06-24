@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Home - Investment Portfolio Tracker{% endblock %}
+{% block content %}
+<div class="p-5 mb-4 bg-light rounded-3">
+  <div class="container-fluid py-4">
+    <h1 class="display-6">Investment Portfolio Tracker</h1>
+    <p class="lead mb-4">Track demat accounts, buy/sell transactions, stock prices, holdings, and portfolio summaries.</p>
+    <a class="btn btn-primary me-2" href="{{ url_for('register') }}">Get Started</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('login') }}">Login</a>
+  </div>
+</div>
+{% endblock %}

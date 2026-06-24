@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Stock Prices - Investment Portfolio Tracker{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Stock Prices</h1>
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h5">Update Current Holding Price</h2>
+    <p class="text-muted mb-3">
+      Only stocks you currently hold across all demat accounts appear here. Sold-out stocks stay hidden.
+    </p>
+    <form method="post">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="stock_symbol">Stock Symbol</label>
+          <select class="form-select" id="stock_symbol" name="stock_symbol" {% if not holdings %}disabled{% endif %} required>
+            <option value="" disabled {% if not selected_symbol %}selected{% endif %}>Select a stock</option>
+            {% for item in holdings %}
+              <option value="{{ item.stock_symbol }}" {% if selected_symbol == item.stock_symbol %}selected{% endif %}>
+                {{ item.stock_symbol }} (Qty: {{ item.quantity }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="current_price">Current Price</label>
+          <input
+            class="form-control"
+            id="current_price"
+            name="current_price"
+            type="number"
+            min="0.01"
+            step="0.01"
+            value="{{ entered_price }}"
+            {% if not holdings %}disabled{% endif %}
+            required
+          >
+        </div>
+      </div>
+      <div class="mt-3">
+        <button class="btn btn-primary" type="submit" {% if not holdings %}disabled{% endif %}>Save Price</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Stock</th>
+        <th>Quantity Held</th>
+        <th>Current Price</th>
+        <th>Current Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in holdings %}
+      <tr>
+        <td>{{ item.stock_symbol }}</td>
+        <td>{{ item.quantity }}</td>
+        <td>
+          {% if item.current_price > 0 %}
+            Rs. {{ "%.2f"|format(item.current_price) }}
+          {% else %}
+            <span class="text-muted">Not set</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if item.current_price > 0 %}
+            Rs. {{ "%.2f"|format(item.current_value) }}
+          {% else %}
+            <span class="text-muted">Not set</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-center text-muted">Add a transaction first to update stock prices.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

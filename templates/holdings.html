@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Holdings - Investment Portfolio Tracker{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Holdings</h1>
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Stock</th>
+        <th>Quantity</th>
+        <th>Current Price</th>
+        <th>Current Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in holdings %}
+      <tr>
+        <td>{{ item.stock_symbol }}</td>
+        <td>{{ item.quantity }}</td>
+        <td>Rs. {{ "%.2f"|format(item.current_price) }}</td>
+        <td>Rs. {{ "%.2f"|format(item.current_value) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-center text-muted">No holdings yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

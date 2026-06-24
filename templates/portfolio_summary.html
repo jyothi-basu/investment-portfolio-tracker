@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Portfolio Summary - Investment Portfolio Tracker{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Portfolio Summary</h1>
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card"><div class="card-body"><strong>Total Investment</strong><div>Rs. {{ "%.2f"|format(summary.total_investment) }}</div></div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card"><div class="card-body"><strong>Current Portfolio Value</strong><div>Rs. {{ "%.2f"|format(summary.current_portfolio_value) }}</div></div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card"><div class="card-body"><strong>Profit / Loss</strong><div>Rs. {{ "%.2f"|format(summary.profit_loss) }}</div></div></div>
+  </div>
+</div>
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card"><div class="card-body"><strong>Total Stocks Held</strong><div>{{ summary.total_stocks_held }}</div></div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card"><div class="card-body"><strong>Total Demat Accounts</strong><div>{{ summary.total_demat_accounts }}</div></div></div>
+  </div>
+</div>
+{% endblock %}

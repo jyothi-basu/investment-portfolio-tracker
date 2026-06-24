@@ -1,0 +1,27 @@
+body {
+  background: #f6f7fb;
+}
+
+.stat-card {
+  border: 0;
+  background: linear-gradient(135deg, #1f3c88, #3f78e0);
+  color: #fff;
+}
+
+.stat-label {
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.card {
+  border-radius: 1rem;
+}
+
+.table {
+  background: #fff;
+}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Account Summary - Investment Portfolio Tracker{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Demat Account Wise Summary</h1>
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Broker</th>
+        <th>Stocks</th>
+        <th>Investment Value</th>
+        <th>Current Value</th>
+        <th>Profit / Loss</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for summary in summaries %}
+      <tr>
+        <td>{{ summary.broker_name }}</td>
+        <td>{{ summary.number_of_stocks }}</td>
+        <td>Rs. {{ "%.2f"|format(summary.investment_value) }}</td>
+        <td>Rs. {{ "%.2f"|format(summary.current_value) }}</td>
+        <td>Rs. {{ "%.2f"|format(summary.profit_loss) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="text-center text-muted">No account summary available.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Chat - Investment Portfolio Tracker{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">AI Assistant</h1>
+<p class="text-muted mb-4">
+  Ask questions about your portfolio, holdings, transactions, or how to use the app.
+  The assistant uses your current portfolio context and does not have live market data.
+</p>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="post">
+      <div class="mb-3">
+        <label class="form-label" for="message">Your message</label>
+        <textarea
+          class="form-control"
+          id="message"
+          name="message"
+          rows="4"
+          placeholder="Example: What is my current profit or loss?"
+          required
+        >{{ user_message }}</textarea>
+      </div>
+      <button class="btn btn-primary" type="submit">Send</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Conversation</h2>
+    <div class="d-grid gap-3">
+      {% for item in chat_history %}
+        <div class="border rounded p-3 {% if item.role == 'assistant' %}bg-light{% endif %}">
+          <div class="small text-uppercase text-muted mb-1">{{ item.role }}</div>
+          <div style="white-space: pre-wrap;">{{ item.content }}</div>
+        </div>
+      {% else %}
+        <div class="text-muted">No messages yet. Ask the assistant a question to get started.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

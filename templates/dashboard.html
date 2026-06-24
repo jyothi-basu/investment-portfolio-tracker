@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Investment Portfolio Tracker{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Dashboard</h1>
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card stat-card">
+      <div class="card-body">
+        <div class="stat-label">Total Investment</div>
+        <div class="stat-value">Rs. {{ "%.2f"|format(summary.total_investment) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card">
+      <div class="card-body">
+        <div class="stat-label">Current Portfolio Value</div>
+        <div class="stat-value">Rs. {{ "%.2f"|format(summary.current_portfolio_value) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card">
+      <div class="card-body">
+        <div class="stat-label">Profit / Loss</div>
+        <div class="stat-value">Rs. {{ "%.2f"|format(summary.profit_loss) }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row g-3">
+  <div class="col-md-3">
+    <div class="card"><div class="card-body"><strong>Total Stocks Held</strong><div>{{ summary.total_stocks_held }}</div></div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card"><div class="card-body"><strong>Total Demat Accounts</strong><div>{{ summary.total_demat_accounts }}</div></div></div>
+  </div>
+</div>
+<hr class="my-4">
+<h2 class="h5">Current Holdings</h2>
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Stock</th>
+        <th>Qty</th>
+        <th>Current Price</th>
+        <th>Current Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in holdings %}
+      <tr>
+        <td>{{ item.stock_symbol }}</td>
+        <td>{{ item.quantity }}</td>
+        <td>Rs. {{ "%.2f"|format(item.current_price) }}</td>
+        <td>Rs. {{ "%.2f"|format(item.current_value) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-center text-muted">No holdings yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Demat Accounts - Investment Portfolio Tracker{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Demat Accounts</h1>
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h5">{{ 'Edit Account' if editing_account else 'Add Account' }}</h2>
+    <form method="post">
+      <input type="hidden" name="account_id" value="{{ editing_account.account_id if editing_account else '' }}">
+      <div class="mb-3">
+        <label class="form-label" for="broker_name">Broker Name</label>
+        <input class="form-control" id="broker_name" name="broker_name" value="{{ editing_account.broker_name if editing_account else '' }}" required>
+      </div>
+      <button class="btn btn-primary" type="submit">{{ 'Update' if editing_account else 'Add' }}</button>
+      {% if editing_account %}
+        <a class="btn btn-link" href="{{ url_for('accounts_page') }}">Cancel</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Broker Name</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for account in accounts %}
+      <tr>
+        <td>{{ account.broker_name }}</td>
+        <td>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('accounts_page', edit_id=account.account_id) }}">Edit</a>
+          <a class="btn btn-sm btn-outline-danger" href="{{ url_for('delete_account', account_id=account.account_id) }}" onclick="return confirmDelete('Delete this demat account?')">Delete</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="2" class="text-center text-muted">No demat accounts yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
