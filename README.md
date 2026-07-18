@@ -226,4 +226,4 @@ The UI follows basic accessibility practices:
 
 ## License
 
-This project is intended for learning and educational use.
+This project is intended for learning and educational use and is licensed under the [MIT License](LICENSE).
