@@ -1,43 +1,148 @@
 {% extends "base.html" %}
 {% block title %}Chat - Investment Portfolio Tracker{% endblock %}
 {% block content %}
-<h1 class="h3 mb-3">AI Assistant</h1>
-<p class="text-muted mb-4">
-  Ask questions about your portfolio, holdings, transactions, or how to use the app.
-  The assistant uses your current portfolio context and does not have live market data.
-</p>
-
-<div class="card mb-4">
-  <div class="card-body">
-    <form method="post">
-      <div class="mb-3">
-        <label class="form-label" for="message">Your message</label>
-        <textarea
-          class="form-control"
-          id="message"
-          name="message"
-          rows="4"
-          placeholder="Example: What is my current profit or loss?"
-          required
-        >{{ user_message }}</textarea>
-      </div>
-      <button class="btn btn-primary" type="submit">Send</button>
-    </form>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1">AI Assistant</h1>
+    <p class="text-muted mb-0">
+      Each chat keeps its own message history. Select an existing chat or create a new one.
+    </p>
   </div>
+  <form method="post" class="m-0">
+    <input type="hidden" name="action" value="create_chat">
+    <button class="btn btn-outline-primary" type="submit">New Chat</button>
+  </form>
 </div>
 
-<div class="card">
-  <div class="card-body">
-    <h2 class="h5 mb-3">Conversation</h2>
-    <div class="d-grid gap-3">
-      {% for item in chat_history %}
-        <div class="border rounded p-3 {% if item.role == 'assistant' %}bg-light{% endif %}">
-          <div class="small text-uppercase text-muted mb-1">{{ item.role }}</div>
-          <div style="white-space: pre-wrap;">{{ item.content }}</div>
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Chats</h2>
+        <div class="list-group">
+          {% for chat in chats %}
+            <div class="list-group-item d-flex justify-content-between align-items-start {% if chat.chat_id == active_chat_id %}active{% endif %}">
+              <div class="me-2">
+                <a
+                  class="{% if chat.chat_id == active_chat_id %}text-white{% else %}text-decoration-none{% endif %}"
+                  href="{{ url_for('chat_page', chat_id=chat.chat_id) }}"
+                >
+                  {{ chat.title or 'Chat ' ~ chat.chat_id }}
+                </a>
+                <div class="small {% if chat.chat_id == active_chat_id %}text-white-50{% else %}text-muted{% endif %}">
+                  Updated {{ chat.updated_at }}
+                </div>
+              </div>
+              <form method="post" action="{{ url_for('delete_chat', chat_id=chat.chat_id) }}" class="m-0">
+                <button class="btn btn-sm {% if chat.chat_id == active_chat_id %}btn-light{% else %}btn-outline-danger{% endif %}" type="submit">
+                  Delete
+                </button>
+              </form>
+            </div>
+          {% else %}
+            <div class="text-muted">No chats yet.</div>
+          {% endfor %}
         </div>
-      {% else %}
-        <div class="text-muted">No messages yet. Ask the assistant a question to get started.</div>
-      {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card mb-4">
+      <div class="card-body">
+        <h2 class="h5 mb-3">{{ selected_chat.title or 'Chat ' ~ selected_chat.chat_id }}</h2>
+        <form method="post">
+          <input type="hidden" name="chat_id" value="{{ selected_chat.chat_id }}">
+          <input type="hidden" name="action" value="send_message">
+          <div class="mb-3">
+            <label class="form-label" for="message">Your message</label>
+            <textarea
+              class="form-control"
+              id="message"
+              name="message"
+              rows="4"
+              placeholder="Example: What is my current profit or loss?"
+              required
+            >{{ user_message }}</textarea>
+          </div>
+          <button class="btn btn-primary" type="submit">Send</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-body">
+        <h3 class="h5 mb-3">Documents</h3>
+        <form method="post" enctype="multipart/form-data" class="mb-4">
+          <input type="hidden" name="chat_id" value="{{ selected_chat.chat_id }}">
+          <input type="hidden" name="action" value="upload_document">
+          <div class="mb-3">
+            <label class="form-label" for="document">Upload financial document</label>
+            <input class="form-control" type="file" id="document" name="document" required>
+            <div class="form-text">Supported types: PDF, DOCX, TXT, MD.</div>
+          </div>
+          <button class="btn btn-outline-primary" type="submit">Upload</button>
+        </form>
+
+        <div class="d-grid gap-3">
+          {% for document in documents %}
+            <div class="border rounded p-3">
+              <div class="d-flex justify-content-between align-items-start gap-3">
+                <div>
+                  <div class="fw-semibold">{{ document.original_filename }}</div>
+                  <div class="small text-muted">
+                    Uploaded {{ document.uploaded_at }} | Status: {{ document.processing_status }}
+                  </div>
+                </div>
+                <form method="post" action="{{ url_for('delete_document', document_id=document.document_id) }}" class="m-0">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                </form>
+              </div>
+            </div>
+          {% else %}
+            <div class="text-muted">No documents uploaded to this chat yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h3 class="h5 mb-3">Conversation</h3>
+        <div class="d-grid gap-3">
+          {% for item in messages %}
+            <div class="border rounded p-3 {% if item.role == 'ASSISTANT' %}bg-light{% endif %}">
+              <div class="small text-uppercase text-muted mb-1">
+                {{ 'You' if item.role == 'USER' else 'Assistant' }}
+              </div>
+              {% if item.role == 'ASSISTANT' and '\n\nSources:\n' in item.content %}
+                {% set parts = item.content.split('\n\nSources:\n', 1) %}
+                <div style="white-space: pre-wrap;">{{ parts[0] }}</div>
+                <div class="mt-3">
+                  <div class="small text-muted mb-2">Sources</div>
+                  <div class="d-flex flex-wrap gap-2">
+                    {% for line in parts[1].split('\n') %}
+                      {% if line.strip() and line.strip() != 'Sources:' %}
+                        <span
+                          class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1 text-start shadow-sm"
+                          style="pointer-events: none; white-space: nowrap;"
+                          title="Referenced source"
+                        >
+                          {{ line.strip() }}
+                        </span>
+                      {% endif %}
+                    {% endfor %}
+                  </div>
+                </div>
+              {% else %}
+                <div style="white-space: pre-wrap;">{{ item.content }}</div>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="text-muted">No messages yet. Ask the assistant a question to get started.</div>
+          {% endfor %}
+        </div>
+      </div>
     </div>
   </div>
 </div>

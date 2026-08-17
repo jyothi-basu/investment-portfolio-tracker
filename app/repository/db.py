@@ -1,10 +1,15 @@
+"""SQLite access layer for portfolio data, chats, messages, and uploaded documents."""
+
 from pathlib import Path
 import sqlite3
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 DB_PATH = BASE_DIR / "portfolio.db"
 SCHEMA_PATH = BASE_DIR / "schema.sql"
+
+CHAT_MESSAGE_ROLES = {"USER", "ASSISTANT"}
+DOCUMENT_STATUSES = {"UPLOADED", "PROCESSING", "COMPLETED", "REJECTED", "FAILED"}
 
 
 def get_connection():
@@ -266,3 +271,164 @@ def fetch_account_count(user_id):
         one=True,
     )
     return int(row["total"] if row else 0)
+
+
+def fetch_chats(user_id):
+    return query(
+        """
+        SELECT *
+        FROM chats
+        WHERE user_id = ?
+        ORDER BY updated_at DESC, chat_id DESC
+        """,
+        (user_id,),
+    )
+
+
+def fetch_chat(chat_id, user_id):
+    return query(
+        "SELECT * FROM chats WHERE chat_id = ? AND user_id = ?",
+        (chat_id, user_id),
+        one=True,
+    )
+
+
+def create_chat(user_id, title=None):
+    return execute(
+        """
+        INSERT INTO chats (user_id, title, created_at, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """,
+        (user_id, title),
+    )
+
+
+def update_chat_title(chat_id, user_id, title):
+    return execute(
+        """
+        UPDATE chats
+        SET title = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE chat_id = ? AND user_id = ?
+        """,
+        (title, chat_id, user_id),
+    )
+
+
+def touch_chat(chat_id):
+    return execute(
+        """
+        UPDATE chats
+        SET updated_at = CURRENT_TIMESTAMP
+        WHERE chat_id = ?
+        """,
+        (chat_id,),
+    )
+
+
+def delete_chat(chat_id, user_id):
+    return execute(
+        "DELETE FROM chats WHERE chat_id = ? AND user_id = ?",
+        (chat_id, user_id),
+    )
+
+
+def fetch_chat_messages(chat_id, user_id):
+    return query(
+        """
+        SELECT m.*
+        FROM chat_messages m
+        JOIN chats c ON c.chat_id = m.chat_id
+        WHERE m.chat_id = ? AND c.user_id = ?
+        ORDER BY m.message_id ASC
+        """,
+        (chat_id, user_id),
+    )
+
+
+def create_chat_message(chat_id, role, content):
+    normalized_role = role.strip().upper() if role else ""
+    if normalized_role not in CHAT_MESSAGE_ROLES:
+        raise ValueError("role must be USER or ASSISTANT")
+    return execute(
+        """
+        INSERT INTO chat_messages (chat_id, role, content, created_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """,
+        (chat_id, normalized_role, content),
+    )
+
+
+def delete_chat_messages(chat_id):
+    return execute("DELETE FROM chat_messages WHERE chat_id = ?", (chat_id,))
+
+
+def fetch_documents(user_id):
+    return query(
+        """
+        SELECT *
+        FROM documents
+        WHERE user_id = ?
+        ORDER BY uploaded_at DESC, document_id DESC
+        """,
+        (user_id,),
+    )
+
+
+def fetch_documents_for_chat(chat_id, user_id):
+    return query(
+        """
+        SELECT d.*
+        FROM documents d
+        JOIN chats c ON c.chat_id = d.chat_id
+        WHERE d.chat_id = ? AND c.user_id = ?
+        ORDER BY d.uploaded_at DESC, d.document_id DESC
+        """,
+        (chat_id, user_id),
+    )
+
+
+def fetch_document(document_id, user_id):
+    return query(
+        """
+        SELECT d.*
+        FROM documents d
+        JOIN chats c ON c.chat_id = d.chat_id
+        WHERE d.document_id = ? AND c.user_id = ?
+        """,
+        (document_id, user_id),
+        one=True,
+    )
+
+
+def create_document(chat_id, user_id, original_filename, processing_status="UPLOADED"):
+    normalized_status = processing_status.strip().upper() if processing_status else ""
+    if normalized_status not in DOCUMENT_STATUSES:
+        raise ValueError("processing_status must be a valid document status")
+    return execute(
+        """
+        INSERT INTO documents (chat_id, user_id, original_filename, uploaded_at, processing_status)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+        """,
+        (chat_id, user_id, original_filename, normalized_status),
+    )
+
+
+def update_document_status(document_id, user_id, processing_status):
+    normalized_status = processing_status.strip().upper() if processing_status else ""
+    if normalized_status not in DOCUMENT_STATUSES:
+        raise ValueError("processing_status must be a valid document status")
+    return execute(
+        """
+        UPDATE documents
+        SET processing_status = ?
+        WHERE document_id = ? AND user_id = ?
+        """,
+        (normalized_status, document_id, user_id),
+    )
+
+
+def delete_document(document_id, user_id):
+    return execute(
+        "DELETE FROM documents WHERE document_id = ? AND user_id = ?",
+        (document_id, user_id),
+    )

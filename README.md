@@ -1,14 +1,17 @@
 # Investment Portfolio Tracker
 
-Investment Portfolio Tracker is a Flask-based web application developed as an Agentic AI course assignment. The project demonstrates an AI-assisted software development workflow while providing a practical tool for tracking stock investments across multiple demat accounts.
+Investment Portfolio Tracker is a Flask-based Python backend project for tracking stock portfolios across multiple demat accounts. It combines transactional portfolio management, document ingestion, vector search, and a tool-calling AI assistant in a layered application design.
 
-The application lets a user record buy and sell transactions, manually maintain prices for currently held stocks, and view holdings and portfolio summaries in one place.
+The current implementation includes:
 
-This project is intended for educational use and course evaluation.
+- user registration and login
+- portfolio management across multiple demat accounts
+- manual stock-price maintenance for currently held stocks
+- persistent chat history
+- document upload and per-chat indexing
+- a tool-calling AI assistant that can answer portfolio, uploaded-document, and app-usage questions
 
-## Course Context
-
-This application was created for an Agentic AI assignment. The goal is to show how an AI-assisted development process can be used to plan, structure, build, and document a functional software system.
+This project is intended to showcase Python backend engineering, database design, and AI orchestration skills.
 
 ## What This App Does
 
@@ -21,13 +24,32 @@ The application helps you:
 - view current holdings
 - view demat account-wise summaries
 - view an overall portfolio summary
-- use an AI chat assistant for portfolio and app-related questions
+- use an AI chat assistant for portfolio, uploaded-document, and app-related questions
 
 The app does not connect to any external stock market API. All stock prices are entered by the user.
 
-## For Users
+## Why This Project Stands Out
 
-If you want to use the application as a normal user, here is the flow:
+This project shows more than CRUD:
+
+- layered Flask backend design
+- exact portfolio calculations in a service layer
+- authenticated, user-scoped data access
+- document ingestion with PDF page-level metadata
+- vector search with Chroma
+- LangChain tool calling with trusted server-side context
+- UI-visible source citations for assistant answers
+
+## Tech Highlights
+
+- Flask routes separated from business rules and repository code
+- SQLite-backed relational storage for users, chats, transactions, and documents
+- Chroma-backed vector store for uploaded-document retrieval
+- OpenAI + LangChain tool-calling assistant
+- Trusted request context for user and chat ownership
+- per-chat document grounding and citations
+
+## User Flow
 
 1. Open the application in your browser.
 2. Create a new account using the `Register` page.
@@ -51,7 +73,17 @@ If you want to use the application as a normal user, here is the flow:
 - `Portfolio Summary` - see overall portfolio details
 - `Chat` - ask the AI assistant about your portfolio and the app
 
-### How Portfolio Values Are Calculated
+### Feature Summary
+
+| Area | Capability |
+| --- | --- |
+| Authentication | Register, log in, session-based protection |
+| Portfolio | Demat accounts, transactions, holdings, summaries, manual prices |
+| Chat | Persistent per-chat conversations |
+| Documents | Upload, index, retrieve, delete |
+| AI Assistant | Portfolio, document, and app-help tool calling |
+
+### Portfolio Logic
 
 The application uses a simple rule set:
 
@@ -71,13 +103,11 @@ Example:
 - You must log in before using portfolio pages.
 - You can only see your own data.
 - Stock prices must be entered manually and only for stocks currently held in the portfolio.
-- The AI chat assistant requires `OPENROUTER_API_KEY` to be set in the environment.
+- The AI assistant requires `OPENAI_API_KEY` to be set in the environment.
 - If you delete a demat account, its transactions are also removed.
 - If you enter invalid values, the app will show a validation message.
 
-## For Setup / Maintenance
-
-This section is for anyone who wants to run the project locally, test it, or continue maintenance. The person using this section might be a developer, a tester, a maintainer, or a technically comfortable user.
+## Setup
 
 ### Tech Stack
 
@@ -88,15 +118,47 @@ This section is for anyone who wants to run the project locally, test it, or con
 - Bootstrap 5
 - Vanilla JavaScript
 - bcrypt for password hashing
+- OpenAI for chat generation
+- LangChain tool calling
+- Chroma vector storage
 
 ### Project Structure
 
 ```text
 investment_portfolio_tracker/
 ├── app.py
-├── routes.py
-├── service.py
-├── storage.py
+├── app/
+│   ├── __init__.py
+│   ├── ai/
+│   │   ├── __init__.py
+│   │   ├── app_help.py
+│   │   ├── chat.py
+│   │   ├── context.py
+│   │   ├── orchestrator.py
+│   │   ├── prompts.py
+│   │   ├── tools.py
+│   │   └── rag/
+│   │       ├── __init__.py
+│   │       ├── chunker.py
+│   │       ├── embeddings.py
+│   │       ├── loader.py
+│   │       ├── retriever.py
+│   │       ├── validator.py
+│   │       └── vector_store.py
+│   ├── repository/
+│   │   ├── __init__.py
+│   │   └── db.py
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   ├── chat.py
+│   │   ├── common.py
+│   │   └── portfolio.py
+│   └── services/
+│       ├── __init__.py
+│       ├── chat_service.py
+│       ├── document_service.py
+│       └── portfolio_service.py
 ├── schema.sql
 ├── requirements.txt
 ├── README.md
@@ -145,19 +207,28 @@ http://127.0.0.1:5000
 
 The project is organized in layers:
 
-- `routes.py` handles HTTP requests, form handling, and redirects
-- `service.py` handles business rules
-- `storage.py` handles SQLite operations
+- `app/routes/` handles HTTP requests, form handling, and redirects
+- `app/services/` handles business rules
+- `app/repository/` handles SQLite operations
+- `app/ai/` handles prompt templates, trusted assistant context, LangChain tool calling, and RAG helpers
 - `schema.sql` defines the database schema
 - `app.py` starts the Flask application
+
+The assistant uses a tool-calling flow:
+
+1. The user asks a question in chat.
+2. The LLM decides whether it needs portfolio data, uploaded-document evidence, app-help content, or more than one source.
+3. The server executes the selected tools with trusted authenticated context.
+4. The tool results are returned to the LLM.
+5. The LLM generates the final answer and the UI renders sources when document evidence is used.
 
 ### Design Goal
 
 The codebase is intentionally split into clear layers so it is easier to debug, test, and extend:
 
-- request handling stays in `routes.py`
-- business decisions stay in `service.py`
-- database access stays in `storage.py`
+- request handling stays in `app/routes/`
+- business decisions stay in `app/services/`
+- database access stays in `app/repository/`
 - the schema stays in `schema.sql`
 
 ### Database
@@ -170,6 +241,36 @@ The main tables are:
 - `demat_accounts`
 - `transactions`
 - `stock_prices`
+- `chats`
+- `chat_messages`
+- `documents`
+
+Uploaded document chunks are stored in Chroma with user/chat ownership metadata and page numbers for PDF documents.
+
+### AI Assistant
+
+The assistant is project-specific and does not provide financial advice.
+
+It can:
+
+- answer app-usage questions using application help content
+- answer portfolio questions using exact portfolio calculations from the service layer
+- answer uploaded-document questions using RAG retrieval from the current chat
+- combine portfolio and document evidence when both are needed
+
+The assistant does not guess user identity or chat identity. Those values come from the authenticated Flask session and the active chat context on the server.
+
+### Portfolio Value
+
+This project is a good portfolio piece for a remote Python backend role because it demonstrates:
+
+- layered Flask architecture
+- service-layer business rules
+- exact portfolio calculations
+- authenticated data access
+- document ingestion and RAG
+- trusted tool calling with LLMs
+- per-chat source isolation
 
 ### Authentication
 
@@ -220,10 +321,17 @@ The UI follows basic accessibility practices:
 
 ### Chat does not respond
 
-- Confirm that `OPENROUTER_API_KEY` is set
-- Check that the selected OpenRouter model is valid
+- Confirm that `OPENAI_API_KEY` is set
+- Check that the selected OpenAI model is valid
 - Verify your internet connection
+
+### The assistant gives the wrong kind of answer
+
+- Ask the question more directly
+- Upload the relevant document into the same chat
+- Make sure the active chat is the one that contains the document evidence
+- Remember that app-help, portfolio, and document questions now route through separate tools
 
 ## License
 
-This project is intended for learning and educational use and is licensed under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
