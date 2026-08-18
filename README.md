@@ -1,6 +1,6 @@
 # Investment Portfolio Tracker
 
-Investment Portfolio Tracker is a Flask-based Python backend project for tracking stock portfolios across multiple demat accounts. It combines transactional portfolio management, document ingestion, vector search, and a tool-calling AI assistant in a layered application design.
+Investment Portfolio Tracker is a Flask-based Python backend project for tracking stock portfolios across multiple demat accounts. Its defining feature is a multi-source, tool-calling AI assistant that combines backend portfolio tools, uploaded-document retrieval, and application-help guidance in a layered application design.
 
 The current implementation includes:
 
@@ -11,7 +11,7 @@ The current implementation includes:
 - document upload and per-chat indexing
 - a tool-calling AI assistant that can answer portfolio, uploaded-document, and app-usage questions
 
-This project is intended to showcase Python backend engineering, database design, and AI orchestration skills.
+This project demonstrates Python backend engineering, database design, and AI orchestration.
 
 ## What This App Does
 
@@ -30,15 +30,16 @@ The app does not connect to any external stock market API. All stock prices are 
 
 ## Why This Project Stands Out
 
-This project shows more than CRUD:
+This project goes beyond CRUD:
 
 - layered Flask backend design
 - exact portfolio calculations in a service layer
 - authenticated, user-scoped data access
 - document ingestion with PDF page-level metadata
 - vector search with Chroma
-- LangChain tool calling with trusted server-side context
-- UI-visible source citations for assistant answers
+- LangChain tool calling with trusted server-side request context
+- user- and chat-scoped document retrieval
+- source citations for assistant answers
 
 ## Tech Highlights
 
@@ -219,8 +220,10 @@ The assistant uses a tool-calling flow:
 1. The user asks a question in chat.
 2. The LLM decides whether it needs portfolio data, uploaded-document evidence, app-help content, or more than one source.
 3. The server executes the selected tools with trusted authenticated context.
-4. The tool results are returned to the LLM.
-5. The LLM generates the final answer and the UI renders sources when document evidence is used.
+4. `user_id` and `chat_id` are supplied by the server, not by the model.
+5. Uploaded-document retrieval is scoped to the authenticated user and active chat.
+6. The tool results are returned to the LLM.
+7. The LLM generates the final answer, and the UI renders sources when document evidence is used.
 
 ### Design Goal
 
@@ -255,14 +258,16 @@ It can:
 
 - answer app-usage questions using application help content
 - answer portfolio questions using exact portfolio calculations from the service layer
-- answer uploaded-document questions using RAG retrieval from the current chat
+- answer uploaded-document questions using RAG retrieval from the current authenticated user and active chat
 - combine portfolio and document evidence when both are needed
 
-The assistant does not guess user identity or chat identity. Those values come from the authenticated Flask session and the active chat context on the server.
+The assistant does not guess user identity or chat identity. Those values come from trusted server-side request context, so the LLM never controls `user_id` or `chat_id`.
 
-### Portfolio Value
+For document-specific facts, current tool results are the source of truth. Conversation history can help the model understand follow-up questions, but it is not treated as evidence for uploaded-document answers. If the current retrieved evidence does not support a fact, the assistant should say it cannot be verified from the currently available uploaded documents rather than guessing from earlier chat context.
 
-This project is a good portfolio piece for a remote Python backend role because it demonstrates:
+### Backend Engineering Highlights
+
+This project is a solid example of Python backend work because it demonstrates:
 
 - layered Flask architecture
 - service-layer business rules
