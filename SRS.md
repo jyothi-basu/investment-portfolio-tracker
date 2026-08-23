@@ -6,11 +6,11 @@ Investment Portfolio Tracker with AI Investment Research Assistant
 
 # Project Overview
 
-Investment Portfolio Tracker is a web-based application for managing stock investments across multiple demat accounts and querying uploaded financial documents through an AI assistant.
+Investment Portfolio Tracker is a web-based application for managing stock investments across multiple demat accounts and querying uploaded financial documents through an AI assistant. The document search pipeline is also exposed through a separate STDIO MCP server for compatible clients.
 
 The application helps users manage stock investments across multiple demat accounts. Users can record buy and sell transactions, manually maintain prices for currently held stocks, view holdings, analyze account-wise summaries, and view an overall portfolio summary.
 
-The current implementation includes an **AI-powered Investment Research Assistant** built with a constrained tool-calling architecture.
+The current implementation includes an **AI-powered Investment Research Assistant** built with a constrained tool-calling architecture, plus a separate MCP document-search interface that reuses the same RAG pipeline.
 
 The assistant combines multiple sources of context when needed:
 
@@ -126,7 +126,9 @@ The application shall continue to use a layered architecture.
 * `app/services/` contains business rules and portfolio calculations.
 * `app/repository/` contains SQLite database operations.
 * `app/ai/` contains chat orchestration, tool definitions, trusted request context, prompts, and RAG helpers.
+* `app/mcp/` contains the STDIO MCP document-search server.
 * `schema.sql` contains the database schema definition.
+* `mcp_server.py` starts the standalone MCP server.
 
 The AI functionality shall be added without unnecessarily duplicating existing business logic.
 
@@ -167,6 +169,8 @@ The AI assistant shall use a constrained LangChain tool-calling flow:
 4. Tools execute read-only portfolio, application-help, or RAG retrieval logic.
 5. Tool results are returned to the model.
 6. The model generates the final answer from the returned evidence.
+
+The document RAG pipeline shall also be reusable from a standalone STDIO MCP server so that external MCP clients can search uploaded documents without going through the Flask chat route.
 
 ---
 
@@ -285,9 +289,10 @@ The current codebase has implemented the following:
 * RAG storage in Chroma with user/chat ownership metadata
 * application help content for usage questions
 * a tool-calling assistant architecture with trusted user/chat context
+* a standalone STDIO MCP server for document search
 * source citations for retrieved document evidence
 
-The remaining work before final sign-off is validation and regression testing in the live browser workflow.
+The remaining work before final sign-off is validation and regression testing in the live browser workflow and MCP client workflow.
 * The application should be usable with NVDA.
 
 ---
@@ -1375,6 +1380,7 @@ The project shall be considered complete when:
 * The assistant does not invent unavailable numerical risk information.
 * The assistant does not provide financial advice or investment recommendations.
 * The assistant clearly states when required information is unavailable.
+* The standalone STDIO MCP document-search server works with a compatible MCP client.
 * Users can view holdings.
 * Users can view demat account-wise summaries.
 * Users can view portfolio summaries.

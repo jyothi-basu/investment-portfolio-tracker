@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "investment-portfolio-tracker-rag": {
+      "command": "REPLACE_WITH_YOUR_PYTHON_PATH",
+      "args": ["mcp_server.py"],
+      "cwd": "REPLACE_WITH_YOUR_REPO_PATH"
+    }
+  }
+}

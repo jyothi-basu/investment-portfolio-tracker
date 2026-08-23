@@ -2,6 +2,11 @@
 
 Investment Portfolio Tracker is a Flask-based Python backend project for tracking stock portfolios across multiple demat accounts. Its defining feature is a multi-source, tool-calling AI assistant that combines backend portfolio tools, uploaded-document retrieval, and application-help guidance in a layered application design.
 
+The document RAG pipeline is available through two transports:
+
+- the existing Flask + LangChain assistant
+- a separate STDIO MCP server for Codex CLI and other MCP clients
+
 The current implementation includes:
 
 - user registration and login
@@ -40,6 +45,7 @@ This project goes beyond CRUD:
 - LangChain tool calling with trusted server-side request context
 - user- and chat-scoped document retrieval
 - source citations for assistant answers
+- a separate STDIO MCP interface that reuses the same RAG pipeline
 
 ## Tech Highlights
 
@@ -104,7 +110,8 @@ Example:
 - You must log in before using portfolio pages.
 - You can only see your own data.
 - Stock prices must be entered manually and only for stocks currently held in the portfolio.
-- The AI assistant requires `OPENAI_API_KEY` to be set in the environment.
+- The Flask AI assistant and the MCP server require `OPENAI_API_KEY` to be set in the environment.
+- The MCP server also requires `MCP_USER_ID` and `MCP_CHAT_ID`.
 - If you delete a demat account, its transactions are also removed.
 - If you enter invalid values, the app will show a validation message.
 
@@ -122,6 +129,7 @@ Example:
 - OpenAI for chat generation
 - LangChain tool calling
 - Chroma vector storage
+- MCP Python SDK for the STDIO document-search server
 
 ### Project Structure
 
@@ -149,6 +157,9 @@ investment_portfolio_tracker/
 │   ├── repository/
 │   │   ├── __init__.py
 │   │   └── db.py
+│   ├── mcp/
+│   │   ├── __init__.py
+│   │   └── server.py
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── auth.py
@@ -165,6 +176,8 @@ investment_portfolio_tracker/
 ├── README.md
 ├── SRS.md
 ├── portfolio.db
+├── mcp_server.py
+├── mcp.config.example.json
 ├── static/
 │   ├── style.css
 │   └── script.js
@@ -198,11 +211,68 @@ pip install -r requirements.txt
 python app.py
 ```
 
+On Linux/macOS, the equivalent is:
+
+```bash
+python3 app.py
+```
+
 5. Open the browser at the local address shown in the terminal, usually:
 
 ```text
 http://127.0.0.1:5000
 ```
+
+### MCP Server
+
+The repository also includes a separate STDIO MCP server for document search.
+
+Run it directly with:
+
+```bash
+python mcp_server.py
+```
+
+On Linux/macOS, the equivalent is:
+
+```bash
+python3 mcp_server.py
+```
+
+Set the required environment variables in your shell before starting the server:
+
+```bash
+export OPENAI_API_KEY="your_openai_api_key_here"
+export MCP_USER_ID="1"
+export MCP_CHAT_ID="5"
+```
+
+The MCP server reads these environment variables:
+
+- `OPENAI_API_KEY`
+- `MCP_USER_ID`
+- `MCP_CHAT_ID`
+
+Use `mcp.config.example.json` as a template if you want to connect the server from Codex CLI or another MCP client. Different MCP clients may use different local config file formats or field names, so adapt the example to the client you are using. For Codex CLI on Linux/macOS, a minimal configuration looks like this:
+
+```json
+{
+  "mcpServers": {
+    "investment-portfolio-tracker-rag": {
+      "command": "./venv/bin/python",
+      "args": ["mcp_server.py"],
+      "cwd": "/home/you/investment_portfolio_tracker",
+      "env": {
+        "OPENAI_API_KEY": "your_openai_api_key_here",
+        "MCP_USER_ID": "1",
+        "MCP_CHAT_ID": "5"
+      }
+    }
+  }
+}
+```
+
+The committed MCP config file is a template only. Keep real credentials and local IDs in your private `.env` file, and replace the placeholder `cwd` path with your actual repository path before using it.
 
 ### Architecture
 
@@ -212,6 +282,7 @@ The project is organized in layers:
 - `app/services/` handles business rules
 - `app/repository/` handles SQLite operations
 - `app/ai/` handles prompt templates, trusted assistant context, LangChain tool calling, and RAG helpers
+- `app/mcp/` handles the STDIO MCP document-search server
 - `schema.sql` defines the database schema
 - `app.py` starts the Flask application
 
@@ -224,6 +295,8 @@ The assistant uses a tool-calling flow:
 5. Uploaded-document retrieval is scoped to the authenticated user and active chat.
 6. The tool results are returned to the LLM.
 7. The LLM generates the final answer, and the UI renders sources when document evidence is used.
+
+The MCP server follows the same retrieval path for document search, but it reads `MCP_USER_ID` and `MCP_CHAT_ID` from the environment instead of Flask request context.
 
 ### Design Goal
 
