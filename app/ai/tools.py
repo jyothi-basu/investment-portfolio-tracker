@@ -8,6 +8,7 @@ response.
 """
 
 from dataclasses import dataclass, field
+import logging
 from typing import Callable
 
 from langchain_core.tools import tool
@@ -17,6 +18,9 @@ from app.ai.context import get_trusted_chat_id, get_trusted_user_id
 from app.ai.prompts import build_document_citation, format_document_chunks, format_portfolio_context
 from app.ai.rag.retriever import retrieve_relevant_chunks
 from app.services import portfolio_service
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -132,6 +136,6 @@ def execute_tool_call(tool_name, tool_args=None):
         tool_args = {}
     try:
         return executor(**tool_args)
-    except Exception as exc:
-        print(f"[assistant-tool-error] {tool_name} failed: {exc!r}")
+    except Exception:
+        logger.exception("assistant tool execution failed name=%s", tool_name)
         raise

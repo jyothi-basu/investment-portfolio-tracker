@@ -1,16 +1,23 @@
 """LangChain-backed assistant runtime for tool-calling and final answer generation."""
 
-import os
+from copy import deepcopy
+import logging
 
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from langchain_openai import ChatOpenAI
 
 from app.ai.prompts import PROJECT_ASSISTANT_SYSTEM_PROMPT, format_citations
+from app.ai.provider_factory import (
+    ProviderConfigurationError,
+    build_chat_model,
+    get_chat_provider_settings,
+)
 from app.ai.tools import ToolExecutionResult, execute_tool_call, get_assistant_tools
 
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "gpt-4.1-mini"
 MAX_RESPONSE_TOKENS = 300
@@ -41,16 +48,25 @@ def _build_messages(user_message, history=None):
 
 
 def _build_llm():
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        raise ChatServiceError("OPENAI_API_KEY is not set.")
+    try:
+        return build_chat_model(
+            default_model=DEFAULT_MODEL,
+            temperature=0.4,
+            max_tokens=MAX_RESPONSE_TOKENS,
+        )
+    except ProviderConfigurationError as exc:
+        raise ChatServiceError(str(exc)) from exc
 
-    model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
-    return ChatOpenAI(
-        model=model,
-        temperature=0.4,
-        max_tokens=MAX_RESPONSE_TOKENS,
+
+def _log_provider_context():
+    settings = get_chat_provider_settings(default_model=DEFAULT_MODEL)
+    logger.info(
+        "ai.chat.provider provider=%s model=%s max_tokens=%s",
+        settings.provider,
+        settings.model,
+        MAX_RESPONSE_TOKENS,
     )
+    return settings
 
 
 def _message_text(content):
@@ -70,6 +86,28 @@ def _message_text(content):
     if content is None:
         return ""
     return str(content).strip()
+
+
+def _message_debug_view(message):
+    """Return a compact, log-safe view of a LangChain message."""
+
+    additional_kwargs = getattr(message, "additional_kwargs", {}) or {}
+    tool_calls = getattr(message, "tool_calls", None) or []
+    return {
+        "type": type(message).__name__,
+        "content_preview": _message_text(getattr(message, "content", ""))[:200],
+        "additional_kwargs_keys": sorted(additional_kwargs.keys()),
+        "tool_call_count": len(tool_calls),
+        "tool_call_ids": [
+            getattr(tool_call, "id", None) if not isinstance(tool_call, dict) else tool_call.get("id")
+            for tool_call in tool_calls
+        ],
+        "tool_call_names": [
+            getattr(tool_call, "name", None) if not isinstance(tool_call, dict) else tool_call.get("name")
+            for tool_call in tool_calls
+        ],
+        "tool_call_id": getattr(message, "tool_call_id", None),
+    }
 
 
 def _extract_tool_calls(message):
@@ -123,14 +161,34 @@ def _append_citations(answer, citations):
 
 
 def _run_tool_loop(llm, messages):
-    tool_bound_llm = llm.bind_tools(get_assistant_tools())
+    assistant_tools = get_assistant_tools()
+    logger.info("ai.chat.bind_tools tool_count=%s", len(assistant_tools))
+    try:
+        tool_bound_llm = llm.bind_tools(assistant_tools)
+    except Exception:
+        logger.exception("ai.chat.bind_tools failed")
+        raise
+
+    logger.info("ai.chat.bind_tools complete")
     citations = []
 
     for _ in range(MAX_TOOL_ROUNDS):
-        response = tool_bound_llm.invoke(messages)
-        messages.append(response)
+        logger.info("ai.chat.invoke start message_count=%s", len(messages))
+        logger.info("ai.chat.invoke messages=%s", [_message_debug_view(message) for message in messages])
+        try:
+            response = tool_bound_llm.invoke(messages)
+        except Exception:
+            logger.exception("ai.chat.invoke failed")
+            raise
+
+        logger.info("ai.chat.invoke complete response_type=%s", type(response).__name__)
+        response_kwargs = getattr(response, "additional_kwargs", {}) or {}
+        logger.info("ai.chat.invoke response_message=%s", _message_debug_view(response))
+        logger.info("ai.chat.invoke metadata keys=%s", sorted(response_kwargs.keys()))
+        messages.append(deepcopy(response))
 
         tool_calls = [_normalise_tool_call(tool_call) for tool_call in _extract_tool_calls(response)]
+        logger.info("ai.chat.tool_calls requested=%s", [tool_call["name"] for tool_call in tool_calls])
         if not tool_calls:
             answer = _message_text(response.content)
             if not answer:
@@ -141,11 +199,13 @@ def _run_tool_loop(llm, messages):
             tool_name = tool_call["name"]
             tool_args = tool_call["args"] or {}
             tool_id = tool_call["id"] or f"{tool_name}-call-{index}"
+            logger.info("ai.chat.tool_execute name=%s", tool_name)
 
             try:
                 result = execute_tool_call(tool_name, tool_args)
-            except Exception as exc:
-                raise ChatServiceError(f"Tool execution failed for {tool_name}.") from exc
+            except Exception:
+                logger.exception("ai.chat.tool_execute failed name=%s", tool_name)
+                raise ChatServiceError(f"Tool execution failed for {tool_name}.") from None
 
             if isinstance(result, ToolExecutionResult):
                 citations.extend(result.citations)
@@ -161,16 +221,29 @@ def _run_tool_loop(llm, messages):
 def get_chat_response(user_message, history=None, portfolio_context=None):
     """Generate a response with tool-calling and optional backward-compatible context."""
 
-    llm = _build_llm()
-    messages = _build_messages(user_message, history=history)
-
-    # The portfolio_context argument is kept only for backward compatibility.
-    # The new architecture resolves portfolio/document/app-help context through tools.
-    _ = portfolio_context
-
+    provider_settings = None
     try:
+        provider_settings = _log_provider_context()
+        llm = _build_llm()
+        messages = _build_messages(user_message, history=history)
+
+        # The portfolio_context argument is kept only for backward compatibility.
+        # The new architecture resolves portfolio/document/app-help context through tools.
+        _ = portfolio_context
+
         return _run_tool_loop(llm, messages)
+    except ProviderConfigurationError as exc:
+        logger.exception("ai.chat.provider_configuration_failed")
+        raise ChatServiceError(str(exc)) from exc
     except ChatServiceError:
         raise
-    except Exception as exc:
-        raise ChatServiceError("Unable to contact the AI provider right now.") from exc
+    except Exception:
+        if provider_settings is not None:
+            logger.exception(
+                "ai.chat.unhandled_failure provider=%s model=%s",
+                provider_settings.provider,
+                provider_settings.model,
+            )
+        else:
+            logger.exception("ai.chat.unhandled_failure provider=unknown model=unknown")
+        raise ChatServiceError("Unable to contact the AI provider right now.")

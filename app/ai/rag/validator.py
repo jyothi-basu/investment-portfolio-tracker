@@ -5,7 +5,9 @@ import os
 from pathlib import Path
 import re
 
-from openai import OpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from app.ai.provider_factory import ProviderConfigurationError, build_chat_model
 
 
 DEFAULT_MODEL = "gpt-4.1-mini"
@@ -85,6 +87,25 @@ def _count_phrase_hits(text, phrases):
     return sum(1 for phrase in phrases if phrase in lowered)
 
 
+def _message_text(content):
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                if item.get("type") == "text":
+                    parts.append(item.get("text", ""))
+                elif "text" in item:
+                    parts.append(item.get("text", ""))
+        return "".join(parts).strip()
+    if content is None:
+        return ""
+    return str(content).strip()
+
+
 def _looks_like_financial_document(text):
     positive = _count_phrase_hits(text, POSITIVE_PHRASES)
     negative = _count_phrase_hits(text, NEGATIVE_PHRASES)
@@ -139,44 +160,41 @@ def classify_document_relevance(text, filename):
         heuristic["confidence"] = "high"
         return heuristic
 
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    api_key = os.environ.get("LLM_API_KEY", os.environ.get("OPENAI_API_KEY", "")).strip()
     if not api_key:
         # Fall back to deterministic heuristics when the API is unavailable.
         heuristic["confidence"] = "medium"
         return heuristic
 
-    model = os.environ.get("OPENAI_RAG_CLASSIFIER_MODEL", os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)).strip() or DEFAULT_MODEL
-    client = OpenAI(api_key=api_key)
+    model = os.environ.get("LLM_MODEL", os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)).strip() or DEFAULT_MODEL
     prompt_text = text[:8000]
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            temperature=0,
-            max_tokens=250,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
+        client = build_chat_model(default_model=model, temperature=0, max_tokens=250)
+        response = client.invoke(
+            [
+                SystemMessage(
+                    content=(
                         "You classify whether a document is relevant to company financial research. "
                         "Return only valid JSON with keys relevant, reason, document_type, company, and confidence. "
                         "Set relevant to true only if the document is about company financial information, corporate reporting, "
                         "investor material, financial performance, risks, or related investment-research content. "
                         "Be conservative: if unsure, set relevant to false."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
+                    )
+                ),
+                HumanMessage(
+                    content=(
                         f"Filename: {filename}\n\n"
                         f"Document excerpt:\n{prompt_text}\n\n"
                         "Return JSON now."
-                    ),
-                },
-            ],
+                    )
+                ),
+            ]
         )
-        content = response.choices[0].message.content or ""
+        content = _message_text(getattr(response, "content", ""))
         parsed = _extract_json_object(content)
+    except ProviderConfigurationError:
+        parsed = None
     except Exception:
         parsed = None
 

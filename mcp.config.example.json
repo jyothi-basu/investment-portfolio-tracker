@@ -3,7 +3,15 @@
     "investment-portfolio-tracker-rag": {
       "command": "REPLACE_WITH_YOUR_PYTHON_PATH",
       "args": ["mcp_server.py"],
-      "cwd": "REPLACE_WITH_YOUR_REPO_PATH"
+      "cwd": "REPLACE_WITH_YOUR_REPO_PATH",
+      "env": {
+        "EMBEDDINGS_PROVIDER": "openai",
+        "EMBEDDINGS_MODEL": "text-embedding-3-small",
+        "EMBEDDINGS_API_KEY": "REPLACE_WITH_YOUR_API_KEY",
+        "EMBEDDINGS_BASE_URL": "",
+        "MCP_USER_ID": "REPLACE_WITH_YOUR_USER_ID",
+        "MCP_CHAT_ID": "REPLACE_WITH_YOUR_CHAT_ID"
+      }
     }
   }
 }

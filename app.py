@@ -1,4 +1,5 @@
 import os
+import logging
 
 from dotenv import load_dotenv
 
@@ -7,6 +8,7 @@ from app.repository.db import init_db
 
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
 
 app = create_app()

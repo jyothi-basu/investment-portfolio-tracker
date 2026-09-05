@@ -32,6 +32,7 @@ The project demonstrates the practical use of:
 * Semantic retrieval
 * AI tools
 * Retrieval-Augmented Generation
+* provider-aware chat and embedding clients, including local SentenceTransformer embeddings
 
 The application is built using Python, Flask, SQLite, Bootstrap, HTML, CSS, and JavaScript.
 
@@ -226,6 +227,23 @@ Chroma shall be used for semantic retrieval of financial-document information.
 * LangChain Core
 * LangChain OpenAI integration
 * LangChain Chroma integration
+
+## AI Provider Architecture
+
+The project shall separate chat models and embedding models into independent provider factories.
+
+Chat models shall:
+
+* support OpenAI-compatible chat providers through configuration
+* support OpenAI-style endpoints exposed by compatible third-party providers
+* continue using the existing tool-calling orchestration and trusted request context
+
+Embedding models shall:
+
+* support OpenAI-compatible embedding APIs
+* support local SentenceTransformer embedding models configured through `EMBEDDINGS_MODEL`
+
+The AI layer shall be configurable through environment variables so the chat model and embedding model can use the same provider or two compatible providers. The current implementation shall remain compatible with OpenAI-compatible chat endpoints, plus OpenAI-compatible or local embedding endpoints.
 
 ## Template Engine
 
