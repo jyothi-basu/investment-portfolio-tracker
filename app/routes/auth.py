@@ -1,58 +1,65 @@
-"""Authentication routes for registration, login, and logout."""
+"""Authentication and trusted request-context helpers for the web layer.
 
-import os
+This module reads authenticated user state from server-side session data,
+validates the active chat, and binds the assistant request context so
+downstream tools can access trusted `user_id` and `chat_id` without exposing
+them to the model.
+"""
 
-from flask import flash, redirect, render_template, request, session, url_for
+from __future__ import annotations
 
-from app.services import portfolio_service as service
+from contextlib import contextmanager
+
+from fastapi import HTTPException, Request, status
+
+from app.ai.context import AssistantRequestContext, push_assistant_context
 
 
-def register_routes(app):
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
+def _read_session_int(request: Request, key: str):
+    value = request.session.get(key)
+    if value in {None, ""}:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
-    @app.context_processor
-    def inject_user():
-        user_id = session.get("user_id")
-        return {"logged_in_user": service.fetch_user(user_id) if user_id else None}
 
-    @app.route("/")
-    def home():
-        return render_template("home.html")
+def get_authenticated_user_id(request: Request) -> int:
+    """Return the trusted authenticated user_id from the session."""
 
-    @app.route("/register", methods=["GET", "POST"])
-    def register():
-        if request.method == "POST":
-            username = request.form.get("username", "").strip()
-            email = request.form.get("email", "").strip().lower()
-            password = request.form.get("password", "")
-            if not username or not email or not password:
-                flash("All fields are required.", "danger")
-            elif len(password) < 8:
-                flash("Password must be at least 8 characters long.", "danger")
-            else:
-                ok, message = service.register_user(username, email, password)
-                flash(message, "success" if ok else "danger")
-                if ok:
-                    return redirect(url_for("login"))
-        return render_template("register.html")
+    user_id = _read_session_int(request, "user_id")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Please log in to continue.",
+        )
+    return user_id
 
-    @app.route("/login", methods=["GET", "POST"])
-    def login():
-        if request.method == "POST":
-            email = request.form.get("email", "").strip().lower()
-            password = request.form.get("password", "")
-            user = service.authenticate_user(email, password)
-            if not user:
-                flash("Invalid email or password.", "danger")
-            else:
-                session.clear()
-                session["user_id"] = user["user_id"]
-                flash("Welcome back.", "success")
-                return redirect(url_for("dashboard_page"))
-        return render_template("login.html")
 
-    @app.route("/logout")
-    def logout():
-        session.clear()
-        flash("You have been logged out.", "info")
-        return redirect(url_for("home"))
+def get_active_chat_id(request: Request):
+    """Return the trusted active chat_id from the session if available."""
+
+    return _read_session_int(request, "active_chat_id")
+
+
+def get_trusted_request_context(request: Request) -> AssistantRequestContext:
+    """Return the authenticated user/chat context required by assistant tools."""
+
+    user_id = get_authenticated_user_id(request)
+    chat_id = get_active_chat_id(request)
+    if chat_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An active chat is required for assistant requests.",
+        )
+    return AssistantRequestContext(user_id=user_id, chat_id=chat_id)
+
+
+@contextmanager
+def bind_trusted_request_context(request: Request):
+    """Bind trusted assistant context for the duration of a FastAPI request."""
+
+    context = get_trusted_request_context(request)
+    with push_assistant_context(user_id=context.user_id, chat_id=context.chat_id):
+        yield context

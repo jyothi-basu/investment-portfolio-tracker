@@ -1,14 +1,10 @@
-"""FastAPI routes for the public pages and authentication flow.
-
-This module replaces the Flask-only home, register, login, and logout routes
-with FastAPI equivalents so the browser flow works end to end during migration.
-"""
+"""Public page and authentication routes for the web application."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from app.fastapi_templates import flash_message, redirect_to, render_template
+from app.routes.common import flash_message, redirect_to, render_template
 from app.services import portfolio_service
 
 

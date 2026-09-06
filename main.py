@@ -1,13 +1,13 @@
-"""FastAPI foundation for the future Flask-to-FastAPI migration.
+"""FastAPI application entrypoint for the Investment Portfolio Tracker.
 
-This module mirrors the current project bootstrap so the ASGI app can share the
-same environment loading, database initialization, static assets, and template
-paths without moving business logic yet.
+This module creates the FastAPI app, loads shared configuration, and mounts
+the server-rendered web routers used by the application.
 """
 
 from pathlib import Path
 import os
 import logging
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -15,11 +15,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.fastapi_auth import bind_trusted_request_context
-from app.fastapi_chat import router as chat_router
-from app.fastapi_documents import router as document_router
-from app.fastapi_public import router as public_router
-from app.fastapi_portfolio import router as portfolio_router
+from app.routes.auth import bind_trusted_request_context
+from app.routes.chat import router as chat_router
+from app.routes.documents import router as document_router
+from app.routes.portfolio import router as portfolio_router
+from app.routes.public import router as public_router
 from app.repository.db import init_db
 
 
@@ -28,19 +28,33 @@ logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize shared application state before serving requests."""
+
+    init_db()
+    logger.info(
+        "fastapi.startup complete templates=%s static=%s",
+        TEMPLATES_DIR,
+        STATIC_DIR,
+    )
+    yield
+
+
 def create_fastapi_app() -> FastAPI:
-    """Create the FastAPI application shell used during migration."""
+    """Create and configure the FastAPI application."""
 
     app = FastAPI(
         title="Investment Portfolio Tracker",
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan,
     )
 
     # Templates
@@ -88,23 +102,13 @@ def create_fastapi_app() -> FastAPI:
         https_only=False,  # Set True when serving over HTTPS in production.
     )
 
-    # Startup
-    @app.on_event("startup")
-    def _startup() -> None:
-        init_db()
-        logger.info(
-            "fastapi.startup complete templates=%s static=%s",
-            TEMPLATES_DIR,
-            STATIC_DIR,
-        )
-
     # Health check
     @app.get("/health")
     def health():
         return {
             "status": "ok",
             "framework": "fastapi",
-            "phase": "migration-foundation",
+            "phase": "primary",
         }
 
     return app

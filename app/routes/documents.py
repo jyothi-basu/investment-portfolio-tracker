@@ -1,9 +1,4 @@
-"""FastAPI routes for document upload and deletion.
-
-The routes in this module reuse the existing document service so the RAG
-ingestion, page-level PDF metadata, Chroma persistence, and deletion cleanup
-continue to behave exactly as they do in the Flask application.
-"""
+"""Document upload and deletion routes for the web application."""
 
 from __future__ import annotations
 
@@ -12,8 +7,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 
-from app.fastapi_templates import flash_message
-from app.routes.common import parse_int
+from app.routes.common import flash_message, parse_int
 from app.services import chat_service
 from app.services import document_service
 

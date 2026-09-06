@@ -1,10 +1,10 @@
 # Investment Portfolio Tracker
 
-Investment Portfolio Tracker is a Flask-based Python backend project for tracking stock portfolios across multiple demat accounts. Its defining feature is a multi-source, tool-calling AI assistant that combines backend portfolio tools, uploaded-document retrieval, and application-help guidance in a layered application design.
+Investment Portfolio Tracker is a FastAPI-based Python backend project for tracking stock portfolios across multiple demat accounts. Its defining feature is a multi-source, tool-calling AI assistant that combines backend portfolio tools, uploaded-document retrieval, and application-help guidance in a layered application design.
 
 The document RAG pipeline is available through two transports:
 
-- the existing Flask + LangChain assistant
+- the existing FastAPI + LangChain assistant
 - a separate STDIO MCP server for Codex CLI and other MCP clients
 
 The current implementation includes:
@@ -38,7 +38,7 @@ The app does not connect to any external stock market API. All stock prices are 
 
 This project goes beyond CRUD:
 
-- layered Flask backend design
+- layered FastAPI backend design
 - exact portfolio calculations in a service layer
 - authenticated, user-scoped data access
 - document ingestion with PDF page-level metadata
@@ -48,9 +48,13 @@ This project goes beyond CRUD:
 - source citations for assistant answers
 - a separate STDIO MCP interface that reuses the same RAG pipeline
 
+## Project Evolution
+
+This project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. The migration positions the project for JWT authentication, MCP SSE, and LangGraph orchestration.
+
 ## Tech Highlights
 
-- Flask routes separated from business rules and repository code
+- FastAPI routers separated from business rules and repository code
 - SQLite-backed relational storage for users, chats, transactions, and documents
 - Chroma-backed vector store for uploaded-document retrieval
 - OpenAI-compatible and Gemini tool-calling assistant support through LangChain
@@ -111,7 +115,7 @@ Example:
 - You must log in before using portfolio pages.
 - You can only see your own data.
 - Stock prices must be entered manually and only for stocks currently held in the portfolio.
-- The Flask AI assistant uses the provider settings in `LLM_PROVIDER`, `LLM_MODEL`, and `LLM_API_KEY`. Set `LLM_PROVIDER=gemini` to use Gemini's native SDK for tool calling; `LLM_BASE_URL` is not required for Gemini.
+- The AI assistant uses the provider settings in `LLM_PROVIDER`, `LLM_MODEL`, and `LLM_API_KEY`. Set `LLM_PROVIDER=gemini` to use Gemini's native SDK for tool calling; `LLM_BASE_URL` is not required for Gemini.
 - Document embeddings use `EMBEDDINGS_PROVIDER`, `EMBEDDINGS_MODEL`, and `EMBEDDINGS_API_KEY`.
 - The app still accepts the legacy `OPENAI_*` environment variables as fallbacks.
 - The MCP server also requires `MCP_USER_ID` and `MCP_CHAT_ID`.
@@ -123,7 +127,7 @@ Example:
 ### Tech Stack
 
 - Python 3
-- Flask
+- FastAPI
 - SQLite
 - Jinja2
 - Bootstrap 5
@@ -139,7 +143,6 @@ Example:
 
 ```text
 investment_portfolio_tracker/
-├── app.py
 ├── app/
 │   ├── __init__.py
 │   ├── ai/
@@ -149,6 +152,7 @@ investment_portfolio_tracker/
 │   │   ├── context.py
 │   │   ├── orchestrator.py
 │   │   ├── prompts.py
+│   │   ├── provider_factory.py
 │   │   ├── tools.py
 │   │   └── rag/
 │   │       ├── __init__.py
@@ -158,18 +162,20 @@ investment_portfolio_tracker/
 │   │       ├── retriever.py
 │   │       ├── validator.py
 │   │       └── vector_store.py
-│   ├── repository/
-│   │   ├── __init__.py
-│   │   └── db.py
-│   ├── mcp/
-│   │   ├── __init__.py
-│   │   └── server.py
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── auth.py
 │   │   ├── chat.py
 │   │   ├── common.py
-│   │   └── portfolio.py
+│   │   ├── documents.py
+│   │   ├── portfolio.py
+│   │   └── public.py
+│   ├── mcp/
+│   │   ├── __init__.py
+│   │   └── server.py
+│   ├── repository/
+│   │   ├── __init__.py
+│   │   └── db.py
 │   └── services/
 │       ├── __init__.py
 │       ├── chat_service.py
@@ -182,6 +188,7 @@ investment_portfolio_tracker/
 ├── portfolio.db
 ├── mcp_server.py
 ├── mcp.config.example.json
+├── main.py
 ├── static/
 │   ├── style.css
 │   └── script.js
@@ -212,19 +219,19 @@ pip install -r requirements.txt
 4. Run the application:
 
 ```bash
-python app.py
+uvicorn main:app
 ```
 
 On Linux/macOS, the equivalent is:
 
 ```bash
-python3 app.py
+uvicorn main:app
 ```
 
 5. Open the browser at the local address shown in the terminal, usually:
 
 ```text
-http://127.0.0.1:5000
+http://127.0.0.1:8000
 ```
 
 ### MCP Server
@@ -289,13 +296,14 @@ The committed MCP config file is a template only. Keep real credentials and loca
 
 The project is organized in layers:
 
-- `app/routes/` handles HTTP requests, form handling, and redirects
+- `main.py` starts the FastAPI application
+- `app/routes/*.py` handles HTTP requests, form handling, and redirects
 - `app/services/` handles business rules
 - `app/repository/` handles SQLite operations
 - `app/ai/` handles prompt templates, trusted assistant context, LangChain tool calling, and RAG helpers
 - `app/mcp/` handles the STDIO MCP document-search server
 - `schema.sql` defines the database schema
-- `app.py` starts the Flask application
+- `app.py` is no longer used
 
 ### AI Provider Architecture
 
@@ -324,7 +332,7 @@ The assistant uses a tool-calling flow:
 6. The tool results are returned to the LLM.
 7. The LLM generates the final answer, and the UI renders sources when document evidence is used.
 
-The MCP server follows the same retrieval path for document search, but it reads `MCP_USER_ID` and `MCP_CHAT_ID` from the environment instead of Flask request context.
+The MCP server follows the same retrieval path for document search, but it reads `MCP_USER_ID` and `MCP_CHAT_ID` from the environment instead of web request context.
 
 ### Embedding Provider Compatibility
 
@@ -411,7 +419,7 @@ For document-specific facts, current tool results are the source of truth. Conve
 
 This project is a solid example of Python backend work because it demonstrates:
 
-- layered Flask architecture
+- layered FastAPI architecture
 - service-layer business rules
 - exact portfolio calculations
 - authenticated data access

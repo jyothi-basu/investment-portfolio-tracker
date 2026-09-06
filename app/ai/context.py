@@ -1,7 +1,7 @@
 """Request-scoped assistant context for trusted user and chat access.
 
 This module keeps user_id and chat_id out of model-controlled tool parameters.
-The Flask route or orchestration layer sets the trusted context once per request,
+The web route or orchestration layer sets the trusted context once per request,
 and the tool implementations read it internally when they need portfolio or RAG
 data.
 """

@@ -34,7 +34,13 @@ The project demonstrates the practical use of:
 * Retrieval-Augmented Generation
 * provider-aware chat and embedding clients, including local SentenceTransformer embeddings
 
-The application is built using Python, Flask, SQLite, Bootstrap, HTML, CSS, and JavaScript.
+The application is built using Python, FastAPI, SQLite, Bootstrap, HTML, CSS, and JavaScript.
+
+---
+
+# Project Evolution
+
+The project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. The migration positions the project for JWT authentication, MCP SSE, and LangGraph orchestration.
 
 ---
 
@@ -122,8 +128,8 @@ The application shall continue to use a layered architecture.
 
 ## Existing Application Components
 
-* `app.py` starts the Flask application.
-* `app/routes/` handles HTTP requests, form submission, redirects, and flash messages.
+* `main.py` starts the FastAPI application.
+* `app/routes/*.py` handles HTTP requests, form submission, redirects, and flash messages.
 * `app/services/` contains business rules and portfolio calculations.
 * `app/repository/` contains SQLite database operations.
 * `app/ai/` contains chat orchestration, tool definitions, trusted request context, prompts, and RAG helpers.
@@ -136,7 +142,7 @@ The AI functionality shall be added without unnecessarily duplicating existing b
 The high-level architecture shall be:
 
 ```text
-                    Flask Application
+                    FastAPI Application
                            |
               +------------+-------------+
               |                          |
@@ -171,7 +177,7 @@ The AI assistant shall use a constrained LangChain tool-calling flow:
 5. Tool results are returned to the model.
 6. The model generates the final answer from the returned evidence.
 
-The document RAG pipeline shall also be reusable from a standalone STDIO MCP server so that external MCP clients can search uploaded documents without going through the Flask chat route.
+The document RAG pipeline shall also be reusable from a standalone STDIO MCP server so that external MCP clients can search uploaded documents without going through the FastAPI chat route.
 
 ---
 
@@ -180,7 +186,8 @@ The document RAG pipeline shall also be reusable from a standalone STDIO MCP ser
 ## Backend
 
 * Python 3
-* Flask
+* FastAPI
+* Uvicorn
 
 ## Security
 
@@ -1300,7 +1307,6 @@ The metadata shall allow retrieval to be restricted to the current user's chat a
 
 ```text
 investment_portfolio_tracker/
-├── app.py
 ├── app/
 │   ├── __init__.py
 │   ├── ai/
@@ -1310,6 +1316,7 @@ investment_portfolio_tracker/
 │   │   ├── context.py
 │   │   ├── orchestrator.py
 │   │   ├── prompts.py
+│   │   ├── provider_factory.py
 │   │   ├── tools.py
 │   │   └── rag/
 │   │       ├── __init__.py
@@ -1319,15 +1326,17 @@ investment_portfolio_tracker/
 │   │       ├── retriever.py
 │   │       ├── validator.py
 │   │       └── vector_store.py
-│   ├── repository/
-│   │   ├── __init__.py
-│   │   └── db.py
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── auth.py
 │   │   ├── chat.py
 │   │   ├── common.py
-│   │   └── portfolio.py
+│   │   ├── documents.py
+│   │   ├── portfolio.py
+│   │   └── public.py
+│   ├── repository/
+│   │   ├── __init__.py
+│   │   └── db.py
 │   └── services/
 │       ├── __init__.py
 │       ├── chat_service.py
@@ -1338,6 +1347,7 @@ investment_portfolio_tracker/
 ├── README.md
 ├── SRS.md
 ├── portfolio.db
+├── main.py
 ├── static/
 │   ├── style.css
 │   └── script.js
