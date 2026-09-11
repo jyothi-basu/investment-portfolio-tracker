@@ -9,6 +9,7 @@
       Only stocks you currently hold across all demat accounts appear here. Sold-out stocks stay hidden.
     </p>
     <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label" for="stock_symbol">Stock Symbol</label>

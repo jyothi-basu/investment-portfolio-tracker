@@ -40,7 +40,7 @@ The application is built using Python, FastAPI, SQLite, Bootstrap, HTML, CSS, an
 
 # Project Evolution
 
-The project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. The migration positions the project for JWT authentication, MCP SSE, and LangGraph orchestration.
+The project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. Authentication was subsequently migrated to short-lived JWT access tokens with rotating refresh tokens, preparing the project for MCP SSE and LangGraph orchestration.
 
 ---
 
@@ -192,7 +192,12 @@ The document RAG pipeline shall also be reusable from a standalone STDIO MCP ser
 ## Security
 
 * Bcrypt Password Hashing
-* Session-based authentication
+* JWT access-token authentication
+* Rotating, revocable refresh tokens stored as hashes
+* Secure, HttpOnly authentication cookies for the server-rendered UI
+* Bearer-token support for API clients
+* CSRF protection for state-changing browser forms
+* Database-backed user, chat, and document ownership validation
 
 ## Frontend
 
@@ -208,6 +213,7 @@ The document RAG pipeline shall also be reusable from a standalone STDIO MCP ser
 SQLite shall store structured application data such as:
 
 * Users
+* Refresh-token hashes and revocation state
 * Demat accounts
 * Transactions
 * Stock prices
@@ -266,8 +272,13 @@ The AI layer shall be configurable through environment variables so the chat mod
 * Users must only access their own chats.
 * Users must only access documents associated with their own chats.
 * Protected pages must require authentication.
-* Session-based authentication shall be used.
-* Unauthorized users shall be redirected to the login page.
+* Short-lived JWT access tokens shall identify authenticated users.
+* Refresh tokens shall be rotated, revocable, and persisted only as hashes.
+* Browser authentication tokens shall use HttpOnly cookies.
+* Protected API requests may provide access tokens through the Bearer authorization header.
+* Server sessions shall be limited to non-authentication UI state and CSRF data.
+* State-changing browser forms shall require CSRF validation.
+* Unauthorized requests shall be denied without exposing protected data.
 * The AI assistant must operate within the authenticated user's context.
 * AI tools must not allow the AI model to choose or modify the authenticated user's identity.
 * AI tools shall not provide unrestricted database access.
@@ -304,7 +315,9 @@ Requirements:
 
 The current codebase has implemented the following:
 
-* user registration, login, and session-based authentication
+* user registration and JWT authentication with short-lived access tokens
+* refresh-token rotation, hashed persistence, and logout revocation
+* CSRF protection for state-changing server-rendered forms
 * demat account CRUD
 * transaction CRUD with portfolio calculations
 * manual stock-price maintenance for currently held stocks
@@ -317,7 +330,7 @@ The current codebase has implemented the following:
 * a standalone STDIO MCP server for document search
 * source citations for retrieved document evidence
 
-The remaining work before final sign-off is validation and regression testing in the live browser workflow and MCP client workflow.
+The planned architectural extensions are authenticated MCP SSE transport and LangGraph orchestration. Live browser and MCP client regression testing remains part of final sign-off.
 * The application should be usable with NVDA.
 
 ---

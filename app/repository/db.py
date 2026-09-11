@@ -77,6 +77,65 @@ def create_user(username, email, password_hash):
     )
 
 
+def create_refresh_token(user_id, token_jti, token_hash, expires_at):
+    return execute(
+        """
+        INSERT INTO refresh_tokens (user_id, token_jti, token_hash, expires_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (user_id, token_jti, token_hash, expires_at),
+    )
+
+
+def fetch_active_refresh_token(token_jti, user_id):
+    return query(
+        """
+        SELECT * FROM refresh_tokens
+        WHERE token_jti = ? AND user_id = ? AND revoked_at IS NULL
+        """,
+        (token_jti, user_id),
+        one=True,
+    )
+
+
+def rotate_refresh_token(old_jti, user_id, new_jti, new_hash, new_expires_at):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE refresh_tokens
+            SET revoked_at = CURRENT_TIMESTAMP, replaced_by_jti = ?
+            WHERE token_jti = ? AND user_id = ? AND revoked_at IS NULL
+            """,
+            (new_jti, old_jti, user_id),
+        )
+        if cursor.rowcount != 1:
+            conn.rollback()
+            return False
+        conn.execute(
+            """
+            INSERT INTO refresh_tokens (user_id, token_jti, token_hash, expires_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, new_jti, new_hash, new_expires_at),
+        )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def revoke_refresh_token(token_jti, user_id):
+    return execute(
+        """
+        UPDATE refresh_tokens
+        SET revoked_at = COALESCE(revoked_at, CURRENT_TIMESTAMP)
+        WHERE token_jti = ? AND user_id = ?
+        """,
+        (token_jti, user_id),
+    )
+
+
 def fetch_accounts(user_id):
     return query(
         "SELECT * FROM demat_accounts WHERE user_id = ? ORDER BY broker_name",

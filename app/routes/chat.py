@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 
 from app.ai.chat import ChatServiceError
 from app.ai.orchestrator import generate_chat_response
+from app.routes.auth import get_optional_user_id, validate_csrf_token
 from app.routes.common import flash_message, parse_int, redirect_to, render_template
 from app.services import chat_service
 from app.services import document_service
@@ -23,7 +24,7 @@ def _build_history(history_rows):
 
 @router.api_route("/chat", methods=["GET", "POST"])
 async def chat_page(request: Request):
-    user_id = request.session.get("user_id")
+    user_id = get_optional_user_id(request)
     if user_id is None:
         flash_message(request, "Please log in to continue.", "warning")
         return redirect_to(request, "home")
@@ -42,6 +43,7 @@ async def chat_page(request: Request):
 
     if request.method == "POST":
         form = await request.form()
+        validate_csrf_token(request, form.get("csrf_token"))
         action = str(form.get("action", "send_message")).strip().lower()
         posted_chat_id = parse_int(form.get("chat_id"))
         if posted_chat_id is not None:
@@ -123,12 +125,14 @@ async def chat_page(request: Request):
 
 
 @router.post("/chat/delete/{chat_id}")
-def delete_chat(request: Request, chat_id: int):
-    user_id = request.session.get("user_id")
+async def delete_chat(request: Request, chat_id: int):
+    user_id = get_optional_user_id(request)
     if user_id is None:
         flash_message(request, "Please log in to continue.", "warning")
         return redirect_to(request, "home")
 
+    form = await request.form()
+    validate_csrf_token(request, form.get("csrf_token"))
     ok, message = chat_service.delete_chat(chat_id, user_id)
     if ok and request.session.get("active_chat_id") == chat_id:
         request.session.pop("active_chat_id", None)

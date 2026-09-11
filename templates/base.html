@@ -25,7 +25,12 @@
             <li class="nav-item"><a class="nav-link" href="{{ url_for('account_summary_page') }}">Account Summary</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('portfolio_summary_page') }}">Portfolio Summary</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('chat_page') }}">Chat</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}">Logout</a></li>
+            <li class="nav-item">
+              <form method="post" action="{{ url_for('logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="nav-link border-0 bg-transparent" type="submit">Logout</button>
+              </form>
+            </li>
           {% else %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Login</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('register') }}">Register</a></li>

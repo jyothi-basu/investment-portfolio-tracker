@@ -9,7 +9,7 @@ The document RAG pipeline is available through two transports:
 
 The current implementation includes:
 
-- user registration and login
+- user registration and JWT authentication with access and refresh tokens
 - portfolio management across multiple demat accounts
 - manual stock-price maintenance for currently held stocks
 - persistent chat history
@@ -41,6 +41,8 @@ This project goes beyond CRUD:
 - layered FastAPI backend design
 - exact portfolio calculations in a service layer
 - authenticated, user-scoped data access
+- rotated refresh tokens stored as hashes in SQLite
+- CSRF-protected server-rendered forms
 - document ingestion with PDF page-level metadata
 - vector search with Chroma
 - LangChain tool calling with trusted server-side request context
@@ -50,7 +52,7 @@ This project goes beyond CRUD:
 
 ## Project Evolution
 
-This project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. The migration positions the project for JWT authentication, MCP SSE, and LangGraph orchestration.
+This project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. Authentication was subsequently migrated to short-lived JWT access tokens with rotating refresh tokens, preparing the project for MCP SSE and LangGraph orchestration.
 
 ## Tech Highlights
 
@@ -89,7 +91,7 @@ This project started as a Flask-based portfolio tracker during the early stages 
 
 | Area | Capability |
 | --- | --- |
-| Authentication | Register, log in, session-based protection |
+| Authentication | Register, JWT login, access-token renewal, refresh rotation, logout |
 | Portfolio | Demat accounts, transactions, holdings, summaries, manual prices |
 | Chat | Persistent per-chat conversations |
 | Documents | Upload, index, retrieve, delete |
@@ -112,7 +114,7 @@ Example:
 
 ### Important Notes for Users
 
-- You must log in before using portfolio pages.
+- You must log in before using portfolio pages. Browser authentication uses Secure, HttpOnly JWT cookies.
 - You can only see your own data.
 - Stock prices must be entered manually and only for stocks currently held in the portfolio.
 - The AI assistant uses the provider settings in `LLM_PROVIDER`, `LLM_MODEL`, and `LLM_API_KEY`. Set `LLM_PROVIDER=gemini` to use Gemini's native SDK for tool calling; `LLM_BASE_URL` is not required for Gemini.
@@ -133,6 +135,7 @@ Example:
 - Bootstrap 5
 - Vanilla JavaScript
 - bcrypt for password hashing
+- PyJWT for access and refresh token signing
 - Provider-aware chat generation and embeddings through LangChain
 - Native Gemini SDK support for chat tool calling
 - LangChain tool calling
@@ -176,8 +179,12 @@ investment_portfolio_tracker/
 │   ├── repository/
 │   │   ├── __init__.py
 │   │   └── db.py
+│   ├── security/
+│   │   ├── __init__.py
+│   │   └── jwt.py
 │   └── services/
 │       ├── __init__.py
+│       ├── auth_service.py
 │       ├── chat_service.py
 │       ├── document_service.py
 │       └── portfolio_service.py
@@ -210,13 +217,35 @@ investment_portfolio_tracker/
 
 1. Make sure Python 3 is installed.
 2. Open a terminal in the project folder.
-3. Install the dependencies:
+3. Create `.env` from `.env.example` and replace the placeholder secrets and provider settings. Use separate cryptographically random values for `SECRET_KEY` and `JWT_SECRET_KEY`.
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+For local HTTP development, keep `JWT_COOKIE_SECURE=false` and `SESSION_COOKIE_SECURE=false`. Set both to `true` when the application is served over HTTPS in production.
+
+Generate each secret independently:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+4. Install the dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Run the application:
+5. Run the application:
 
 ```bash
 uvicorn main:app
@@ -228,7 +257,7 @@ On Linux/macOS, the equivalent is:
 uvicorn main:app
 ```
 
-5. Open the browser at the local address shown in the terminal, usually:
+6. Open the browser at the local address shown in the terminal, usually:
 
 ```text
 http://127.0.0.1:8000
@@ -300,6 +329,7 @@ The project is organized in layers:
 - `app/routes/*.py` handles HTTP requests, form handling, and redirects
 - `app/services/` handles business rules
 - `app/repository/` handles SQLite operations
+- `app/security/` creates and validates JWT access and refresh tokens
 - `app/ai/` handles prompt templates, trusted assistant context, LangChain tool calling, and RAG helpers
 - `app/mcp/` handles the STDIO MCP document-search server
 - `schema.sql` defines the database schema
@@ -429,7 +459,7 @@ This project is a solid example of Python backend work because it demonstrates:
 
 ### Authentication
 
-User passwords are stored securely using bcrypt hashing. Session-based authentication is used, and protected pages require login.
+User passwords are hashed with bcrypt. Successful login issues a short-lived JWT access token and a rotating refresh token in HttpOnly cookies. Refresh-token hashes are stored in SQLite for rotation and logout revocation, while protected routes also accept access tokens through the standard Bearer authorization header. Server sessions are retained only for flash messages, CSRF state, and the last selected chat; they are not an authentication source.
 
 ### Validation Rules
 

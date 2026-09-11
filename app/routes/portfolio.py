@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from app.routes.auth import get_authenticated_user_id
+from app.routes.auth import get_authenticated_user_id, validate_csrf_token
 from app.routes.common import flash_message, parse_int, redirect_to, render_template
 from app.services import portfolio_service as service
 
@@ -55,6 +55,7 @@ async def accounts_page(request: Request):
 async def accounts_page_post(request: Request):
     user_id = get_authenticated_user_id(request)
     form = await request.form()
+    validate_csrf_token(request, form.get("csrf_token"))
     broker_name = str(form.get("broker_name", "")).strip()
     account_id = str(form.get("account_id", "")).strip()
     if not broker_name:
@@ -79,9 +80,11 @@ async def accounts_page_post(request: Request):
     return redirect_to(request, "accounts_page")
 
 
-@router.get("/accounts/delete/{account_id}")
-def delete_account(request: Request, account_id: int):
+@router.post("/accounts/delete/{account_id}")
+async def delete_account(request: Request, account_id: int):
     user_id = get_authenticated_user_id(request)
+    form = await request.form()
+    validate_csrf_token(request, form.get("csrf_token"))
     ok, message = service.delete_account(account_id, user_id)
     flash_message(request, message, "success" if ok else "danger")
     return redirect_to(request, "accounts_page")
@@ -117,6 +120,7 @@ async def transactions_page(request: Request):
 async def transactions_page_post(request: Request):
     user_id = get_authenticated_user_id(request)
     form = await request.form()
+    validate_csrf_token(request, form.get("csrf_token"))
     transaction_id = str(form.get("transaction_id", "")).strip()
     account_id = str(form.get("account_id", "")).strip()
     stock_symbol = str(form.get("stock_symbol", "")).strip().upper()
@@ -176,9 +180,11 @@ async def transactions_page_post(request: Request):
     return redirect_to(request, "transactions_page")
 
 
-@router.get("/transactions/delete/{transaction_id}")
-def delete_transaction(request: Request, transaction_id: int):
+@router.post("/transactions/delete/{transaction_id}")
+async def delete_transaction(request: Request, transaction_id: int):
     user_id = get_authenticated_user_id(request)
+    form = await request.form()
+    validate_csrf_token(request, form.get("csrf_token"))
     ok, message = service.delete_transaction(transaction_id, user_id)
     flash_message(request, message, "success" if ok else "danger")
     return redirect_to(request, "transactions_page")
@@ -194,6 +200,7 @@ async def prices_page(request: Request):
 
     if request.method == "POST":
         form = await request.form()
+        validate_csrf_token(request, form.get("csrf_token"))
         stock_symbol = str(form.get("stock_symbol", "")).strip().upper()
         current_price = str(form.get("current_price", "")).strip()
         selected_symbol = stock_symbol

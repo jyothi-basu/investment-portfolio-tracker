@@ -8,6 +8,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.routing import NoMatchFound
 
+from app.routes.auth import get_csrf_token, get_optional_user_id
 from app.services import portfolio_service
 
 
@@ -63,11 +64,12 @@ def render_template(
 ) -> HTMLResponse:
     """Render a Jinja template with the globals expected by the views."""
 
-    user_id = request.session.get("user_id")
+    user_id = get_optional_user_id(request)
 
     template_context: dict[str, Any] = {
         "request": request,
         "session": request.session,  # Allows {{ session.get(...) }} in templates
+        "csrf_token": get_csrf_token(request),
         "url_for": lambda endpoint, **params: build_url_for(request, endpoint, **params),
         "get_flashed_messages": lambda with_categories=False: _pop_flash_messages(
             request,
