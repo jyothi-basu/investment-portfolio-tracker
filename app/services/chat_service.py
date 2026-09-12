@@ -9,15 +9,41 @@ def list_chats(user_id):
     return db.fetch_chats(user_id)
 
 
+def list_conversations(user_id):
+    """Return public conversation summaries without exposing internal chat IDs."""
+
+    documents_by_chat = {}
+    for document in db.fetch_documents(user_id):
+        documents_by_chat.setdefault(document["chat_id"], []).append(
+            document["original_filename"]
+        )
+
+    summaries = []
+    for row in db.fetch_conversation_summaries(user_id):
+        last_message = (row["last_message"] or "").strip()
+        summaries.append(
+            {
+                "conversation_id": row["conversation_id"],
+                "chat_title": row["chat_title"],
+                "updated_at": row["updated_at"],
+                "message_count": int(row["message_count"]),
+                "last_message_preview": last_message[:160] or None,
+                "uploaded_documents": documents_by_chat.get(row["chat_id"], []),
+            }
+        )
+    return summaries
+
+
 def get_chat(chat_id, user_id):
     return db.fetch_chat(chat_id, user_id)
 
 
+def get_chat_by_conversation_id(conversation_id, user_id):
+    return db.fetch_chat_by_conversation_id(conversation_id, user_id)
+
+
 def create_chat(user_id, title=None):
-    chat_id = db.create_chat(user_id, title=title)
-    if not title:
-        db.update_chat_title(chat_id, user_id, f"Chat {chat_id}")
-    return chat_id
+    return db.create_chat(user_id, title=title)
 
 
 def delete_chat(chat_id, user_id):

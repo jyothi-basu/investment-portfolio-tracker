@@ -1,5 +1,7 @@
-"""Entry point for the STDIO MCP server used by Codex CLI."""
+"""Compatibility entry point for the local STDIO MCP transport."""
 
-from app.mcp.server import create_server
+from app.mcp.stdio import run_stdio
+
+
 if __name__ == "__main__":
-    create_server().run()
+    run_stdio()

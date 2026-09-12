@@ -9,6 +9,7 @@ from app.ai.orchestrator import generate_chat_response
 from app.routes.auth import get_optional_user_id, validate_csrf_token
 from app.routes.common import flash_message, parse_int, redirect_to, render_template
 from app.services import chat_service
+from app.services.chat_title_service import generate_title_if_needed
 from app.services import document_service
 
 
@@ -85,6 +86,7 @@ async def chat_page(request: Request):
             history = _build_history(history_rows)
             try:
                 chat_service.add_user_message(selected_chat_id, user_message)
+                generate_title_if_needed(selected_chat_id, user_id, user_message)
                 assistant_reply = generate_chat_response(
                     user_message=user_message,
                     user_id=user_id,

@@ -6,11 +6,11 @@ Investment Portfolio Tracker with AI Investment Research Assistant
 
 # Project Overview
 
-Investment Portfolio Tracker is a web-based application for managing stock investments across multiple demat accounts and querying uploaded financial documents through an AI assistant. The document search pipeline is also exposed through a separate STDIO MCP server for compatible clients.
+Investment Portfolio Tracker is a web-based application for managing stock investments across multiple demat accounts and querying uploaded financial documents through an AI assistant. The same document search pipeline is exposed through local STDIO and PAT-authenticated Streamable HTTP MCP transports, with legacy SSE compatibility.
 
 The application helps users manage stock investments across multiple demat accounts. Users can record buy and sell transactions, manually maintain prices for currently held stocks, view holdings, analyze account-wise summaries, and view an overall portfolio summary.
 
-The current implementation includes an **AI-powered Investment Research Assistant** built with a constrained tool-calling architecture, plus a separate MCP document-search interface that reuses the same RAG pipeline.
+The current implementation includes an **AI-powered Investment Research Assistant** built with a constrained tool-calling architecture, plus shared MCP tools that reuse the same RAG pipeline across two transports.
 
 The assistant combines multiple sources of context when needed:
 
@@ -40,7 +40,7 @@ The application is built using Python, FastAPI, SQLite, Bootstrap, HTML, CSS, an
 
 # Project Evolution
 
-The project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. Authentication was subsequently migrated to short-lived JWT access tokens with rotating refresh tokens, preparing the project for MCP SSE and LangGraph orchestration.
+The project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. Authentication was subsequently migrated to short-lived JWT access tokens with rotating refresh tokens. Remote MCP access was added through a Streamable HTTP transport authenticated by revocable personal access tokens.
 
 ---
 
@@ -133,9 +133,9 @@ The application shall continue to use a layered architecture.
 * `app/services/` contains business rules and portfolio calculations.
 * `app/repository/` contains SQLite database operations.
 * `app/ai/` contains chat orchestration, tool definitions, trusted request context, prompts, and RAG helpers.
-* `app/mcp/` contains the STDIO MCP document-search server.
+* `app/mcp/` contains shared MCP tools, STDIO, Streamable HTTP and legacy SSE transports, and ephemeral session management.
 * `schema.sql` contains the database schema definition.
-* `mcp_server.py` starts the standalone MCP server.
+* `mcp_server.py` starts the standalone STDIO transport.
 
 The AI functionality shall be added without unnecessarily duplicating existing business logic.
 
@@ -177,7 +177,16 @@ The AI assistant shall use a constrained LangChain tool-calling flow:
 5. Tool results are returned to the model.
 6. The model generates the final answer from the returned evidence.
 
-The document RAG pipeline shall also be reusable from a standalone STDIO MCP server so that external MCP clients can search uploaded documents without going through the FastAPI chat route.
+The document RAG pipeline shall be reusable through a standalone STDIO MCP server and a FastAPI-hosted Streamable HTTP transport. The older SSE endpoint layout shall remain available for compatible clients. Tools shall be registered once and shared by all transports.
+
+The remote MCP flow shall be:
+
+1. A client authenticates with a personal access token.
+2. The server creates a process-local MCP session associated with the PAT owner.
+3. The client lists its conversations and selects one using a public UUID.
+4. The server validates ownership and resolves that UUID to the internal integer chat ID.
+5. Document-search tools execute with the trusted session user and selected conversation.
+6. The session is removed when the client terminates or disconnects.
 
 ---
 
@@ -194,6 +203,7 @@ The document RAG pipeline shall also be reusable from a standalone STDIO MCP ser
 * Bcrypt Password Hashing
 * JWT access-token authentication
 * Rotating, revocable refresh tokens stored as hashes
+* Argon2-hashed personal access tokens for MCP clients
 * Secure, HttpOnly authentication cookies for the server-rendered UI
 * Bearer-token support for API clients
 * CSRF protection for state-changing browser forms
@@ -276,6 +286,11 @@ The AI layer shall be configurable through environment variables so the chat mod
 * Refresh tokens shall be rotated, revocable, and persisted only as hashes.
 * Browser authentication tokens shall use HttpOnly cookies.
 * Protected API requests may provide access tokens through the Bearer authorization header.
+* MCP Streamable HTTP, SSE, and message requests shall require a valid personal access token.
+* Personal access tokens shall use a project-specific prefix and cryptographically secure random material.
+* A raw personal access token shall be returned only when it is created; only its Argon2 hash shall be persisted.
+* Personal access tokens shall support names, optional expiry, last-use tracking, and revocation.
+* Expired or revoked personal access tokens shall be rejected with HTTP 401.
 * Server sessions shall be limited to non-authentication UI state and CSRF data.
 * State-changing browser forms shall require CSRF validation.
 * Unauthorized requests shall be denied without exposing protected data.
@@ -285,6 +300,7 @@ The AI layer shall be configurable through environment variables so the chat mod
 * AI tools shall be restricted to approved operations.
 * AI tools shall read authenticated user and active chat context from trusted server-side state.
 * Document retrieval shall be restricted by user and chat ownership.
+* MCP clients shall select chats using public `conversation_id` UUIDs, never internal integer chat IDs.
 * Chroma metadata shall contain sufficient information to prevent cross-user and cross-chat retrieval.
 * AI tools shall not perform destructive database operations.
 
@@ -322,15 +338,20 @@ The current codebase has implemented the following:
 * transaction CRUD with portfolio calculations
 * manual stock-price maintenance for currently held stocks
 * persistent chats and chat messages
+* public conversation UUIDs with migration of existing chats
+* delayed, one-time chat title generation after the first non-greeting message
 * document upload, validation, and deletion
 * PDF page-level extraction and metadata-preserving chunking
 * RAG storage in Chroma with user/chat ownership metadata
 * application help content for usage questions
 * a tool-calling assistant architecture with trusted user/chat context
 * a standalone STDIO MCP server for document search
+* a PAT-authenticated MCP Streamable HTTP transport with legacy SSE compatibility and in-memory session cleanup
+* JWT-protected personal access token management APIs
+* a user-scoped conversation listing API
 * source citations for retrieved document evidence
 
-The planned architectural extensions are authenticated MCP SSE transport and LangGraph orchestration. Live browser and MCP client regression testing remains part of final sign-off.
+LangGraph orchestration remains a planned architectural extension. Live browser and remote MCP client regression testing remains part of final sign-off.
 * The application should be usable with NVDA.
 
 ---
@@ -456,8 +477,13 @@ Users shall be able to:
 * Upload documents to a chat.
 * Delete individual documents.
 * Delete an entire chat.
+* Create, view, and revoke personal access tokens from an authenticated settings page.
 
 Each chat shall have its own conversation history.
+
+Each chat shall retain an internal integer primary key and expose a separate UUID `conversation_id` to MCP and external API clients.
+
+New chats shall begin with a null title. Greeting-only messages shall not trigger title generation. The first meaningful message shall trigger a backend model request for a title of no more than six words, and an existing generated title shall not be replaced automatically.
 
 Each chat may contain multiple financial documents.
 
@@ -1141,6 +1167,37 @@ for each demat account.
 
 ---
 
+## Refresh Tokens
+
+* `refresh_token_id INTEGER PRIMARY KEY AUTOINCREMENT`
+* `user_id INTEGER NOT NULL`
+* `token_jti TEXT NOT NULL UNIQUE`
+* `token_hash TEXT NOT NULL`
+* `expires_at TEXT NOT NULL`
+* `created_at TEXT`
+* `revoked_at TEXT`
+* `replaced_by_jti TEXT`
+
+Only refresh-token hashes shall be persisted.
+
+---
+
+## Personal Access Tokens
+
+* `token_id INTEGER PRIMARY KEY AUTOINCREMENT`
+* `user_id INTEGER NOT NULL`
+* `token_selector TEXT NOT NULL UNIQUE`
+* `token_hash TEXT NOT NULL`
+* `name TEXT NOT NULL`
+* `created_at TEXT`
+* `expires_at TEXT`
+* `last_used_at TEXT`
+* `revoked_at TEXT`
+
+The selector is a non-secret lookup identifier. Only the Argon2 hash of the complete PAT shall be stored; the raw token shall be returned once at creation.
+
+---
+
 ## Demat Accounts
 
 * `account_id INTEGER PRIMARY KEY AUTOINCREMENT`
@@ -1186,6 +1243,7 @@ Foreign Key:
 ## Chats
 
 * `chat_id INTEGER PRIMARY KEY AUTOINCREMENT`
+* `conversation_id TEXT NOT NULL UNIQUE`
 * `user_id INTEGER NOT NULL`
 * `title TEXT`
 * `created_at DATETIME`
@@ -1422,6 +1480,8 @@ The project shall be considered complete when:
 * The assistant does not provide financial advice or investment recommendations.
 * The assistant clearly states when required information is unavailable.
 * The standalone STDIO MCP document-search server works with a compatible MCP client.
+* The authenticated MCP HTTP transports reject missing, invalid, expired, and revoked PATs.
+* MCP conversation listing and selection never expose internal chat IDs.
 * Users can view holdings.
 * Users can view demat account-wise summaries.
 * Users can view portfolio summaries.

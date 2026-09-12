@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}API Tokens - Investment Portfolio Tracker{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Personal Access Tokens</h1>
+    <p class="text-muted mb-0">Use revocable tokens to authenticate MCP clients such as Codex CLI.</p>
+  </div>
+</div>
+
+{% if raw_token %}
+<div class="alert alert-warning" role="alert">
+  <h2 class="h5">Copy this token now</h2>
+  <p>This is the only time the complete token will be displayed. Store it securely and do not commit it.</p>
+  <div class="input-group">
+    <input
+      class="form-control font-monospace"
+      id="new-personal-access-token"
+      type="text"
+      value="{{ raw_token }}"
+      readonly
+      aria-label="New personal access token"
+    >
+    <button
+      class="btn btn-outline-dark"
+      type="button"
+      data-copy-target="#new-personal-access-token"
+    >Copy</button>
+  </div>
+</div>
+{% endif %}
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h5">Create a token</h2>
+    <form method="post" action="{{ url_for('create_personal_access_token_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label" for="name">Token name</label>
+          <input
+            class="form-control"
+            id="name"
+            name="name"
+            type="text"
+            maxlength="100"
+            placeholder="Codex on development laptop"
+            required
+          >
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="expires_at">Expires at (optional, UTC)</label>
+          <input class="form-control" id="expires_at" name="expires_at" type="datetime-local">
+        </div>
+        <div class="col-md-2 d-grid">
+          <button class="btn btn-primary" type="submit">Create token</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Created</th>
+        <th>Expires</th>
+        <th>Last used</th>
+        <th>Status</th>
+        <th><span class="visually-hidden">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for token in personal_access_tokens %}
+      <tr>
+        <td>{{ token.name }}</td>
+        <td>{{ token.created_at }}</td>
+        <td>{{ token.expires_at or 'Never' }}</td>
+        <td>{{ token.last_used_at or 'Not used' }}</td>
+        <td>
+          {% if token.status == 'revoked' %}
+            <span class="badge text-bg-secondary">Revoked</span>
+          {% elif token.status == 'expired' %}
+            <span class="badge text-bg-warning">Expired</span>
+          {% else %}
+            <span class="badge text-bg-success">Active</span>
+          {% endif %}
+        </td>
+        <td class="text-end">
+          {% if token.status == 'active' %}
+          <form
+            method="post"
+            action="{{ url_for('revoke_personal_access_token_page', token_id=token.token_id) }}"
+            onsubmit="return confirmDelete('Revoke this personal access token?');"
+          >
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn btn-sm btn-outline-danger" type="submit">Revoke</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="text-center text-muted">No personal access tokens created.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

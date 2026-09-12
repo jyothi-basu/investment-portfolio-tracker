@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import sqlite3
+import uuid
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -23,6 +24,26 @@ def init_db():
     conn = get_connection()
     try:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(chats)").fetchall()
+        }
+        if "conversation_id" not in columns:
+            conn.execute("ALTER TABLE chats ADD COLUMN conversation_id TEXT")
+
+        chats_without_public_id = conn.execute(
+            "SELECT chat_id FROM chats WHERE conversation_id IS NULL OR conversation_id = ''"
+        ).fetchall()
+        for chat in chats_without_public_id:
+            conn.execute(
+                "UPDATE chats SET conversation_id = ? WHERE chat_id = ?",
+                (str(uuid.uuid4()), chat["chat_id"]),
+            )
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_conversation_id
+            ON chats(conversation_id)
+            """
+        )
         conn.commit()
     finally:
         conn.close()
@@ -56,6 +77,66 @@ def fetch_user_by_id(user_id):
         (user_id,),
         one=True,
     )
+
+
+def create_personal_access_token(user_id, selector, token_hash, name, expires_at):
+    return execute(
+        """
+        INSERT INTO personal_access_tokens (
+            user_id, token_selector, token_hash, name, expires_at
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (user_id, selector, token_hash, name, expires_at),
+    )
+
+
+def fetch_personal_access_token_by_selector(selector):
+    return query(
+        "SELECT * FROM personal_access_tokens WHERE token_selector = ?",
+        (selector,),
+        one=True,
+    )
+
+
+def fetch_personal_access_tokens(user_id):
+    return query(
+        """
+        SELECT token_id, name, created_at, expires_at, last_used_at, revoked_at
+        FROM personal_access_tokens
+        WHERE user_id = ?
+        ORDER BY created_at DESC, token_id DESC
+        """,
+        (user_id,),
+    )
+
+
+def touch_personal_access_token(token_id):
+    return execute(
+        """
+        UPDATE personal_access_tokens
+        SET last_used_at = CURRENT_TIMESTAMP
+        WHERE token_id = ? AND revoked_at IS NULL
+        """,
+        (token_id,),
+    )
+
+
+def revoke_personal_access_token(token_id, user_id):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE personal_access_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE token_id = ? AND user_id = ? AND revoked_at IS NULL
+            """,
+            (token_id, user_id),
+        )
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
 
 
 def fetch_user_by_email(email):
@@ -352,13 +433,69 @@ def fetch_chat(chat_id, user_id):
     )
 
 
+def fetch_chat_by_conversation_id(conversation_id, user_id):
+    return query(
+        """
+        SELECT * FROM chats
+        WHERE conversation_id = ? AND user_id = ?
+        """,
+        (conversation_id, user_id),
+        one=True,
+    )
+
+
+def fetch_chat_by_conversation_id_unscoped(conversation_id):
+    """Resolve a local STDIO conversation without exposing its internal ID."""
+
+    return query(
+        "SELECT * FROM chats WHERE conversation_id = ?",
+        (conversation_id,),
+        one=True,
+    )
+
+
+def fetch_conversation_summaries(user_id):
+    return query(
+        """
+        SELECT
+            c.chat_id,
+            c.conversation_id,
+            c.title AS chat_title,
+            c.updated_at,
+            (
+                SELECT COUNT(*)
+                FROM chat_messages AS counted
+                WHERE counted.chat_id = c.chat_id
+            ) AS message_count,
+            (
+                SELECT latest.content
+                FROM chat_messages AS latest
+                WHERE latest.chat_id = c.chat_id
+                ORDER BY latest.message_id DESC
+                LIMIT 1
+            ) AS last_message
+        FROM chats AS c
+        WHERE c.user_id = ?
+        ORDER BY c.updated_at DESC, c.chat_id DESC
+        """,
+        (user_id,),
+    )
+
+
 def create_chat(user_id, title=None):
+    conversation_id = str(uuid.uuid4())
     return execute(
         """
-        INSERT INTO chats (user_id, title, created_at, updated_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO chats (
+            conversation_id,
+            user_id,
+            title,
+            created_at,
+            updated_at
+        )
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """,
-        (user_id, title),
+        (conversation_id, user_id, title),
     )
 
 
@@ -368,6 +505,18 @@ def update_chat_title(chat_id, user_id, title):
         UPDATE chats
         SET title = ?, updated_at = CURRENT_TIMESTAMP
         WHERE chat_id = ? AND user_id = ?
+        """,
+        (title, chat_id, user_id),
+    )
+
+
+def update_chat_title_if_empty(chat_id, user_id, title):
+    return execute(
+        """
+        UPDATE chats
+        SET title = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE chat_id = ? AND user_id = ?
+          AND (title IS NULL OR TRIM(title) = '')
         """,
         (title, chat_id, user_id),
     )

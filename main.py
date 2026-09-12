@@ -22,9 +22,12 @@ from app.routes.auth import (
 )
 from app.routes.chat import router as chat_router
 from app.routes.documents import router as document_router
+from app.routes.mcp import router as mcp_router
 from app.routes.portfolio import router as portfolio_router
 from app.routes.public import router as public_router
 from app.repository.db import init_db
+from app.mcp.session_manager import session_manager
+from app.mcp.streamable_http import run_streamable_http_manager
 from app.security.jwt import TokenValidationError, get_jwt_settings
 
 
@@ -57,7 +60,12 @@ async def lifespan(app: FastAPI):
         TEMPLATES_DIR,
         STATIC_DIR,
     )
-    yield
+    async with run_streamable_http_manager(app):
+        try:
+            yield
+        finally:
+            cleaned = session_manager.clear()
+            logger.info("mcp.sessions.shutdown_cleanup count=%s", cleaned)
 
 
 def create_fastapi_app() -> FastAPI:
@@ -82,6 +90,7 @@ def create_fastapi_app() -> FastAPI:
     app.include_router(portfolio_router)
     app.include_router(document_router)
     app.include_router(chat_router)
+    app.include_router(mcp_router)
 
     # ------------------------------------------------------------------
     # Custom middleware (defined BEFORE SessionMiddleware is added)

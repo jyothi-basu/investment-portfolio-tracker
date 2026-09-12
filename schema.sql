@@ -20,6 +20,22 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id
     ON refresh_tokens(user_id);
 
+CREATE TABLE IF NOT EXISTS personal_access_tokens (
+    token_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token_selector TEXT NOT NULL UNIQUE,
+    token_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    expires_at TEXT,
+    last_used_at TEXT,
+    revoked_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_personal_access_tokens_user_id
+    ON personal_access_tokens(user_id);
+
 CREATE TABLE IF NOT EXISTS demat_accounts (
     account_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -50,6 +66,7 @@ CREATE TABLE IF NOT EXISTS stock_prices (
 
 CREATE TABLE IF NOT EXISTS chats (
     chat_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL UNIQUE,
     user_id INTEGER NOT NULL,
     title TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,

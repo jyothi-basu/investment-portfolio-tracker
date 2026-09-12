@@ -6,10 +6,12 @@ The document RAG pipeline is available through two transports:
 
 - the existing FastAPI + LangChain assistant
 - a separate STDIO MCP server for Codex CLI and other MCP clients
+- a PAT-authenticated Streamable HTTP MCP transport for remote clients
 
 The current implementation includes:
 
 - user registration and JWT authentication with access and refresh tokens
+- revocable, Argon2-hashed personal access tokens for MCP clients
 - portfolio management across multiple demat accounts
 - manual stock-price maintenance for currently held stocks
 - persistent chat history
@@ -49,10 +51,11 @@ This project goes beyond CRUD:
 - user- and chat-scoped document retrieval
 - source citations for assistant answers
 - a separate STDIO MCP interface that reuses the same RAG pipeline
+- an authenticated Streamable HTTP MCP interface with user-scoped conversation selection
 
 ## Project Evolution
 
-This project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. Authentication was subsequently migrated to short-lived JWT access tokens with rotating refresh tokens, preparing the project for MCP SSE and LangGraph orchestration.
+This project started as a Flask-based portfolio tracker during the early stages of the Agentic AI course. As the architecture evolved, the application was migrated to FastAPI while preserving the business, AI, and RAG layers through a layered architecture. Authentication was subsequently migrated to short-lived JWT access tokens with rotating refresh tokens. A PAT-authenticated Streamable HTTP MCP transport was then added without replacing the local STDIO transport, legacy SSE compatibility, or the shared RAG pipeline.
 
 ## Tech Highlights
 
@@ -86,14 +89,15 @@ This project started as a Flask-based portfolio tracker during the early stages 
 - `Demat Account Wise Summary` - see summary for each demat account
 - `Portfolio Summary` - see overall portfolio details
 - `Chat` - ask the AI assistant about your portfolio and the app
+- `API Tokens` - create and revoke personal access tokens for remote MCP clients
 
 ### Feature Summary
 
 | Area | Capability |
 | --- | --- |
-| Authentication | Register, JWT login, access-token renewal, refresh rotation, logout |
+| Authentication | Register, JWT login, refresh rotation, logout, MCP personal access tokens |
 | Portfolio | Demat accounts, transactions, holdings, summaries, manual prices |
-| Chat | Persistent per-chat conversations |
+| Chat | Persistent conversations, public UUIDs, automatic concise titles |
 | Documents | Upload, index, retrieve, delete |
 | AI Assistant | Portfolio, document, and app-help tool calling |
 
@@ -120,7 +124,7 @@ Example:
 - The AI assistant uses the provider settings in `LLM_PROVIDER`, `LLM_MODEL`, and `LLM_API_KEY`. Set `LLM_PROVIDER=gemini` to use Gemini's native SDK for tool calling; `LLM_BASE_URL` is not required for Gemini.
 - Document embeddings use `EMBEDDINGS_PROVIDER`, `EMBEDDINGS_MODEL`, and `EMBEDDINGS_API_KEY`.
 - The app still accepts the legacy `OPENAI_*` environment variables as fallbacks.
-- The MCP server also requires `MCP_USER_ID` and `MCP_CHAT_ID`.
+- Local STDIO uses `MCP_CONVERSATION_ID`; remote HTTP MCP uses a personal access token and never accepts internal user or chat IDs.
 - If you delete a demat account, its transactions are also removed.
 - If you enter invalid values, the app will show a validation message.
 
@@ -140,7 +144,8 @@ Example:
 - Native Gemini SDK support for chat tool calling
 - LangChain tool calling
 - Chroma vector storage
-- MCP Python SDK for the STDIO document-search server
+- MCP Python SDK for STDIO, Streamable HTTP, and legacy SSE transports
+- Argon2 for personal access token hashing
 
 ### Project Structure
 
@@ -171,21 +176,28 @@ investment_portfolio_tracker/
 │   │   ├── chat.py
 │   │   ├── common.py
 │   │   ├── documents.py
+│   │   ├── mcp.py
 │   │   ├── portfolio.py
 │   │   └── public.py
 │   ├── mcp/
 │   │   ├── __init__.py
-│   │   └── server.py
+│   │   ├── server.py
+│   │   ├── session_manager.py
+│   │   ├── sse.py
+│   │   ├── streamable_http.py
+│   │   └── stdio.py
 │   ├── repository/
 │   │   ├── __init__.py
 │   │   └── db.py
 │   ├── security/
 │   │   ├── __init__.py
-│   │   └── jwt.py
+│   │   ├── jwt.py
+│   │   └── personal_access_tokens.py
 │   └── services/
 │       ├── __init__.py
 │       ├── auth_service.py
 │       ├── chat_service.py
+│       ├── chat_title_service.py
 │       ├── document_service.py
 │       └── portfolio_service.py
 ├── schema.sql
@@ -263,9 +275,11 @@ uvicorn main:app
 http://127.0.0.1:8000
 ```
 
-### MCP Server
+### MCP Transports
 
-The repository also includes a separate STDIO MCP server for document search.
+Both MCP transports use the tools registered once in `app/mcp/server.py` and call the existing document RAG pipeline.
+
+#### Local STDIO
 
 Run it directly with:
 
@@ -285,20 +299,18 @@ Set the required environment variables in your shell before starting the server:
 export EMBEDDINGS_PROVIDER="openai"
 export EMBEDDINGS_MODEL="text-embedding-3-small"
 export EMBEDDINGS_API_KEY="your_api_key_here"
-export MCP_USER_ID="1"
-export MCP_CHAT_ID="5"
+export MCP_CONVERSATION_ID="replace-with-a-conversation-uuid"
 ```
 
-The MCP server reads these environment variables:
+The STDIO transport reads these environment variables:
 
 - `EMBEDDINGS_PROVIDER`
 - `EMBEDDINGS_MODEL`
 - `EMBEDDINGS_API_KEY`
 - `EMBEDDINGS_BASE_URL`
-- `MCP_USER_ID`
-- `MCP_CHAT_ID`
+- `MCP_CONVERSATION_ID`
 
-Use `mcp.config.example.json` as a template if you want to connect the server from Codex CLI or another MCP client. Different MCP clients may use different local config file formats or field names, so adapt the example to the client you are using. For Codex CLI on Linux/macOS, a minimal configuration looks like this:
+STDIO clients use client-specific command configuration. A generic local example is:
 
 ```json
 {
@@ -311,15 +323,55 @@ Use `mcp.config.example.json` as a template if you want to connect the server fr
         "EMBEDDINGS_PROVIDER": "openai",
         "EMBEDDINGS_MODEL": "text-embedding-3-small",
         "EMBEDDINGS_API_KEY": "your_api_key_here",
-        "MCP_USER_ID": "1",
-        "MCP_CHAT_ID": "5"
+        "MCP_CONVERSATION_ID": "replace-with-a-conversation-uuid"
       }
     }
   }
 }
 ```
 
-The committed MCP config file is a template only. Keep real credentials and local IDs in your private `.env` file, and replace the placeholder `cwd` path with your actual repository path before using it.
+The committed `mcp.config.example.json` demonstrates the remote Streamable HTTP transport. MCP clients use different configuration formats, so keep credentials in environment variables and adapt the example without committing a PAT.
+
+#### Authenticated Streamable HTTP
+
+Start the FastAPI application normally. It exposes:
+
+- `POST /mcp/sse` for Streamable HTTP initialization and JSON-RPC messages
+- `GET /mcp/sse` for Streamable HTTP server events and legacy SSE connections
+- `DELETE /mcp/sse` for Streamable HTTP session termination
+- `POST /mcp/messages` for backward-compatible legacy SSE messages
+- `GET /api/v1/conversations` for user-scoped conversation discovery
+
+For Codex CLI, store the PAT in an environment variable and add the URL-based server:
+
+```bash
+export IPT_MCP_PAT="ipt_pat_replace_with_your_token"
+codex mcp add investment-portfolio-tracker \
+  --url http://127.0.0.1:8000/mcp/sse \
+  --bearer-token-env-var IPT_MCP_PAT
+```
+
+Equivalent `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.investment-portfolio-tracker]
+url = "http://127.0.0.1:8000/mcp/sse"
+bearer_token_env_var = "IPT_MCP_PAT"
+```
+
+Codex treats URL-based MCP servers as Streamable HTTP. Other clients may require an explicit `transport = "streamable_http"` field, as shown in `mcp.config.example.json`.
+
+Remote MCP requests use `Authorization: Bearer ipt_pat_...`. Create, inspect, and revoke PATs through the JWT-authenticated endpoints:
+
+- `POST /api/v1/personal-access-tokens`
+- `GET /api/v1/personal-access-tokens`
+- `DELETE /api/v1/personal-access-tokens/{token_id}`
+
+Browser users can manage the same credentials from `API Tokens` in the authenticated navigation, served at `/settings/personal-access-tokens`. The create response displays the raw PAT once. SQLite stores only its Argon2 hash; expiry, last use, and revocation are tracked separately. Configure the client to send the same PAT header on both SSE and message requests. Production deployments must use HTTPS and should set `MCP_ALLOWED_HOSTS` and `MCP_ALLOWED_ORIGINS` to their exact public values.
+
+HTTP MCP sessions are intentionally stored in memory. Run this transport with one application worker; a multi-worker deployment would require a shared session store or sticky routing.
+
+After connecting, list conversations and call `select_conversation` with a public `conversation_id` UUID. Subsequent `search_uploaded_documents(query)` calls use the selected conversation automatically. Internal integer chat IDs and user IDs are never MCP tool arguments or API response identifiers.
 
 ### Architecture
 
@@ -329,9 +381,9 @@ The project is organized in layers:
 - `app/routes/*.py` handles HTTP requests, form handling, and redirects
 - `app/services/` handles business rules
 - `app/repository/` handles SQLite operations
-- `app/security/` creates and validates JWT access and refresh tokens
+- `app/security/` validates JWTs and creates, verifies, and revokes MCP PATs
 - `app/ai/` handles prompt templates, trusted assistant context, LangChain tool calling, and RAG helpers
-- `app/mcp/` handles the STDIO MCP document-search server
+- `app/mcp/` shares MCP tools across STDIO and authenticated HTTP transports
 - `schema.sql` defines the database schema
 - `app.py` is no longer used
 
@@ -362,7 +414,7 @@ The assistant uses a tool-calling flow:
 6. The tool results are returned to the LLM.
 7. The LLM generates the final answer, and the UI renders sources when document evidence is used.
 
-The MCP server follows the same retrieval path for document search, but it reads `MCP_USER_ID` and `MCP_CHAT_ID` from the environment instead of web request context.
+All MCP transports follow the same retrieval path. Local STDIO resolves `MCP_CONVERSATION_ID` at startup. Streamable HTTP and legacy SSE resolve the authenticated user from a PAT and store the selected public conversation UUID in an in-memory session; ownership is checked before the UUID is mapped to the internal chat ID.
 
 ### Embedding Provider Compatibility
 
@@ -460,6 +512,8 @@ This project is a solid example of Python backend work because it demonstrates:
 ### Authentication
 
 User passwords are hashed with bcrypt. Successful login issues a short-lived JWT access token and a rotating refresh token in HttpOnly cookies. Refresh-token hashes are stored in SQLite for rotation and logout revocation, while protected routes also accept access tokens through the standard Bearer authorization header. Server sessions are retained only for flash messages, CSRF state, and the last selected chat; they are not an authentication source.
+
+MCP HTTP authentication is intentionally separate from browser JWT authentication. MCP clients use revocable personal access tokens with an `ipt_pat_` prefix. Raw PATs are shown only at creation, only Argon2 hashes are persisted, and expired or revoked tokens are rejected. Transport session state is process-local and is removed when the client terminates or disconnects.
 
 ### Validation Rules
 

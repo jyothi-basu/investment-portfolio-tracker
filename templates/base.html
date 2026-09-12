@@ -25,6 +25,7 @@
             <li class="nav-item"><a class="nav-link" href="{{ url_for('account_summary_page') }}">Account Summary</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('portfolio_summary_page') }}">Portfolio Summary</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('chat_page') }}">Chat</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('personal_access_tokens_page') }}">API Tokens</a></li>
             <li class="nav-item">
               <form method="post" action="{{ url_for('logout') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

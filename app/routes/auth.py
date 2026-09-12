@@ -116,6 +116,18 @@ def get_authenticated_user_id(request: Request) -> int:
     return int(user_id)
 
 
+def get_jwt_bearer_user_id(request: Request) -> int:
+    """Require an explicit JWT access token rather than cookie authentication."""
+
+    if not _bearer_token(request):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="A JWT access token is required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return get_authenticated_user_id(request)
+
+
 def get_optional_user_id(request: Request) -> int | None:
     """Return an authenticated user ID when one is available."""
 
