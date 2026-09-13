@@ -302,7 +302,17 @@ class MCPAuthenticationTests(unittest.TestCase):
 
         self.assertEqual(
             {tool.name for tool in tools.tools},
-            {"list_conversations", "select_conversation", "search_uploaded_documents"},
+            {
+                "list_conversations",
+                "select_conversation",
+                "get_portfolio_summary",
+                "get_holdings",
+                "get_transactions",
+                "get_stock_prices",
+                "get_demat_accounts",
+                "search_uploaded_documents",
+                "get_application_help",
+            },
         )
         self.assertIn(chat["conversation_id"], listed.content[0].text)
         self.assertFalse(selected.isError)
@@ -373,7 +383,17 @@ class MCPAuthenticationTests(unittest.TestCase):
 
         self.assertEqual(
             {tool.name for tool in tools.tools},
-            {"list_conversations", "select_conversation", "search_uploaded_documents"},
+            {
+                "list_conversations",
+                "select_conversation",
+                "get_portfolio_summary",
+                "get_holdings",
+                "get_transactions",
+                "get_stock_prices",
+                "get_demat_accounts",
+                "search_uploaded_documents",
+                "get_application_help",
+            },
         )
         self.assertIsNotNone(session_id)
         self.assertFalse(selected.isError)

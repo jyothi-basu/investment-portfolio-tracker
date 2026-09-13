@@ -1,6 +1,6 @@
 # Investment Portfolio Tracker
 
-Investment Portfolio Tracker is a FastAPI-based Python backend project for tracking stock portfolios across multiple demat accounts. Its defining feature is a multi-source, tool-calling AI assistant that combines backend portfolio tools, uploaded-document retrieval, and application-help guidance in a layered application design.
+Investment Portfolio Tracker is a portfolio-quality FastAPI Python backend for tracking stock portfolios across multiple demat accounts. Its defining feature is a multi-source, tool-calling AI assistant that combines backend portfolio tools, uploaded-document retrieval, and application-help guidance in a layered application design.
 
 The document RAG pipeline is available through two transports:
 
@@ -48,6 +48,8 @@ This project goes beyond CRUD:
 - document ingestion with PDF page-level metadata
 - vector search with Chroma
 - LangChain tool calling with trusted server-side request context
+- a reusable shared registry for seven read-only business tools across AI and MCP
+- business-friendly JSON serialization at the AI tool boundary, including normalized transaction and account records
 - user- and chat-scoped document retrieval
 - source citations for assistant answers
 - a separate STDIO MCP interface that reuses the same RAG pipeline
@@ -161,7 +163,13 @@ investment_portfolio_tracker/
 │   │   ├── orchestrator.py
 │   │   ├── prompts.py
 │   │   ├── provider_factory.py
-│   │   ├── tools.py
+│   │   ├── tools/
+│   │   │   ├── __init__.py
+│   │   │   ├── application.py
+│   │   │   ├── common.py
+│   │   │   ├── documents.py
+│   │   │   ├── portfolio.py
+│   │   │   └── registry.py
 │   │   └── rag/
 │   │       ├── __init__.py
 │   │       ├── chunker.py
@@ -277,7 +285,7 @@ http://127.0.0.1:8000
 
 ### MCP Transports
 
-Both MCP transports use the tools registered once in `app/mcp/server.py` and call the existing document RAG pipeline.
+Both MCP transports use the tools registered once in `app/mcp/server.py`. The shared registry exposes the same seven read-only business tools to MCP and the web assistant; MCP additionally exposes the session-only `list_conversations` and `select_conversation` tools.
 
 #### Local STDIO
 
@@ -382,7 +390,7 @@ The project is organized in layers:
 - `app/services/` handles business rules
 - `app/repository/` handles SQLite operations
 - `app/security/` validates JWTs and creates, verifies, and revokes MCP PATs
-- `app/ai/` handles prompt templates, trusted assistant context, LangChain tool calling, and RAG helpers
+- `app/ai/` handles prompt templates, trusted assistant context, LangChain tool calling, the shared read-only tool registry, and RAG helpers
 - `app/mcp/` shares MCP tools across STDIO and authenticated HTTP transports
 - `schema.sql` defines the database schema
 - `app.py` is no longer used
@@ -413,6 +421,18 @@ The assistant uses a tool-calling flow:
 5. Uploaded-document retrieval is scoped to the authenticated user and active chat.
 6. The tool results are returned to the LLM.
 7. The LLM generates the final answer, and the UI renders sources when document evidence is used.
+
+The shared business tool registry currently provides:
+
+- `get_portfolio_summary`
+- `get_holdings`
+- `get_transactions`
+- `get_stock_prices`
+- `get_demat_accounts`
+- `search_uploaded_documents`
+- `get_application_help`
+
+Portfolio services continue to receive explicit `user_id` arguments. AI wrappers obtain identity from trusted assistant context, while MCP adapters obtain identity from authenticated MCP session state. The model never supplies `user_id`, `chat_id`, or `conversation_id`. SQLite rows are normalized into plain business dictionaries before they are serialized for tool consumers.
 
 All MCP transports follow the same retrieval path. Local STDIO resolves `MCP_CONVERSATION_ID` at startup. Streamable HTTP and legacy SSE resolve the authenticated user from a PAT and store the selected public conversation UUID in an in-memory session; ownership is checked before the UUID is mapped to the internal chat ID.
 
@@ -507,6 +527,7 @@ This project is a solid example of Python backend work because it demonstrates:
 - authenticated data access
 - document ingestion and RAG
 - trusted tool calling with LLMs
+- reusable AI/MCP tool contracts with structured business outputs
 - per-chat source isolation
 
 ### Authentication

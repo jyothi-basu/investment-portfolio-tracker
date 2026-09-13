@@ -9,8 +9,8 @@ from uuid import UUID
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
-from app.ai.prompts import format_document_chunks
 from app.ai.rag.retriever import retrieve_relevant_chunks
+from app.ai.tools import get_mcp_tool_adapters
 from app.mcp.session_manager import MCPSession, session_manager
 from app.services import chat_service
 
@@ -53,6 +53,10 @@ def _require_session(context: Context) -> MCPSession:
     return session
 
 
+def _resolve_shared_session(context: Context) -> MCPSession:
+    return _require_session(context)
+
+
 @mcp.tool()
 def list_conversations(ctx: Context) -> list[dict]:
     """List public conversation summaries owned by the authenticated MCP user."""
@@ -86,43 +90,13 @@ def select_conversation(conversation_id: str, ctx: Context) -> str:
     return f"Selected conversation {public_id}: {title}"
 
 
-@mcp.tool()
-def search_uploaded_documents(query: str, ctx: Context) -> str:
-    """Search documents in the authenticated session's selected conversation."""
-
-    query_text = (query or "").strip()
-    if not query_text:
-        return "No document query was provided."
-
-    session = _require_session(ctx)
-    if not session.active_conversation_id:
-        raise ToolError("Select a conversation before searching uploaded documents.")
-
-    chat = chat_service.get_chat_by_conversation_id(
-        session.active_conversation_id,
-        session.user_id,
-    )
-    if not chat:
-        raise ToolError("Conversation not found or not authorized.")
-
-    chunks = retrieve_relevant_chunks(
-        query_text,
-        session.user_id,
-        int(chat["chat_id"]),
-        limit=8,
-    )
-    if not chunks:
-        return (
-            "No relevant uploaded document evidence was found for the query: "
-            f"{query_text!r}."
-        )
-
-    return "\n".join(
-        [
-            f"Document search results for: {query_text}",
-            format_document_chunks(chunks),
-        ]
-    )
+for _tool_name, _tool_function in get_mcp_tool_adapters(
+    _resolve_shared_session,
+    retrieve_fn=lambda query, user_id, chat_id, limit: retrieve_relevant_chunks(
+        query, user_id, chat_id, limit=limit
+    ),
+).items():
+    mcp.add_tool(_tool_function, name=_tool_name)
 
 
 def create_server() -> FastMCP:

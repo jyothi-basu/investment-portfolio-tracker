@@ -132,12 +132,14 @@ The application shall continue to use a layered architecture.
 * `app/routes/*.py` handles HTTP requests, form submission, redirects, and flash messages.
 * `app/services/` contains business rules and portfolio calculations.
 * `app/repository/` contains SQLite database operations.
-* `app/ai/` contains chat orchestration, tool definitions, trusted request context, prompts, and RAG helpers.
+* `app/ai/` contains chat orchestration, the shared read-only tool registry, trusted request context, prompts, and RAG helpers.
 * `app/mcp/` contains shared MCP tools, STDIO, Streamable HTTP and legacy SSE transports, and ephemeral session management.
 * `schema.sql` contains the database schema definition.
 * `mcp_server.py` starts the standalone STDIO transport.
 
 The AI functionality shall be added without unnecessarily duplicating existing business logic.
+
+Read-only business tools shall be defined in a reusable `app/ai/tools/` package. The registry shall be the single source of truth for shared AI and MCP business-tool names and contracts. Tool wrappers may adapt trusted identity for their host, but portfolio services shall continue to accept explicit identity arguments and shall not read request, session, or context state.
 
 The high-level architecture shall be:
 
@@ -345,7 +347,7 @@ The current codebase has implemented the following:
 * RAG storage in Chroma with user/chat ownership metadata
 * application help content for usage questions
 * a tool-calling assistant architecture with trusted user/chat context
-* a standalone STDIO MCP server for document search
+* a standalone STDIO MCP server for shared portfolio and document-search tools
 * a PAT-authenticated MCP Streamable HTTP transport with legacy SSE compatibility and in-memory session cleanup
 * JWT-protected personal access token management APIs
 * a user-scoped conversation listing API
@@ -579,6 +581,18 @@ Existing service-layer portfolio calculations shall be reused where appropriate.
 
 Selected read-only portfolio and information-retrieval functions shall be exposed to the AI as controlled tools.
 
+The shared business tool registry shall expose:
+
+* `get_portfolio_summary`.
+* `get_holdings`.
+* `get_transactions`.
+* `get_stock_prices`.
+* `get_demat_accounts`.
+* `search_uploaded_documents`.
+* `get_application_help`.
+
+The same seven business tools shall be available to the web AI assistant and authenticated MCP transports. MCP session tools `list_conversations` and `select_conversation` shall remain MCP-only because they manage MCP conversation context.
+
 Examples include:
 
 * Retrieve stock holdings.
@@ -597,6 +611,9 @@ AI tools shall:
 * Not modify portfolio data.
 * Not delete data.
 * Not bypass application authorization.
+* Return plain JSON-serializable business objects rather than SQLite row objects.
+* Return transaction records with business-facing fields including symbol, transaction type, quantity, price, transaction date, and demat account where available.
+* Return demat account records with human-readable account or broker names.
 
 The AI shall determine when an available tool is relevant to the user's question.
 
@@ -1388,7 +1405,13 @@ investment_portfolio_tracker/
 │   │   ├── orchestrator.py
 │   │   ├── prompts.py
 │   │   ├── provider_factory.py
-│   │   ├── tools.py
+│   │   ├── tools/
+│   │   │   ├── __init__.py
+│   │   │   ├── application.py
+│   │   │   ├── common.py
+│   │   │   ├── documents.py
+│   │   │   ├── portfolio.py
+│   │   │   └── registry.py
 │   │   └── rag/
 │   │       ├── __init__.py
 │   │       ├── chunker.py
@@ -1465,6 +1488,9 @@ The project shall be considered complete when:
 * Users can ask questions about their uploaded financial documents.
 * The assistant can retrieve relevant document information using RAG.
 * The assistant can retrieve relevant portfolio information through controlled AI tools.
+* The assistant can retrieve portfolio summaries, holdings, transactions, stored stock prices, and demat accounts through shared read-only tools.
+* Shared AI and MCP business tools use one registry and expose consistent tool names.
+* Transaction and demat-account tool results are JSON-serializable business objects rather than SQLite row representations.
 * Existing portfolio business logic is reused where appropriate.
 * The assistant can answer application-related questions using application knowledge.
 * The assistant can answer portfolio-related questions.
@@ -1479,7 +1505,7 @@ The project shall be considered complete when:
 * The assistant does not invent unavailable numerical risk information.
 * The assistant does not provide financial advice or investment recommendations.
 * The assistant clearly states when required information is unavailable.
-* The standalone STDIO MCP document-search server works with a compatible MCP client.
+* The standalone STDIO MCP server exposes the shared portfolio, document-search, and application-help tools to a compatible MCP client.
 * The authenticated MCP HTTP transports reject missing, invalid, expired, and revoked PATs.
 * MCP conversation listing and selection never expose internal chat IDs.
 * Users can view holdings.
