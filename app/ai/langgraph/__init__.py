@@ -1,4 +1,4 @@
-"""Isolated LangGraph infrastructure for the future assistant migration."""
+"""LangGraph infrastructure for the production assistant orchestration."""
 
 from .graph import build_portfolio_graph
 from .state import PortfolioAssistantState

@@ -42,6 +42,12 @@ def get_chat_by_conversation_id(conversation_id, user_id):
     return db.fetch_chat_by_conversation_id(conversation_id, user_id)
 
 
+def get_chat_by_conversation_id_unscoped(conversation_id):
+    """Resolve a configured local MCP conversation before its owner is known."""
+
+    return db.fetch_chat_by_conversation_id_unscoped(conversation_id)
+
+
 def create_chat(user_id, title=None):
     return db.create_chat(user_id, title=title)
 

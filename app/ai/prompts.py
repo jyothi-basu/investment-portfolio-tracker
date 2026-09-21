@@ -22,32 +22,6 @@ PROJECT_ASSISTANT_SYSTEM_PROMPT = (
 )
 
 
-def format_portfolio_context(summary, holdings):
-    """Format an exact portfolio snapshot for tool output."""
-
-    lines = [
-        "Portfolio snapshot:",
-        f"- Total investment: Rs. {summary['total_investment']:.2f}",
-        f"- Current portfolio value: Rs. {summary['current_portfolio_value']:.2f}",
-        f"- Profit / loss: Rs. {summary['profit_loss']:.2f}",
-        f"- Total stocks held: {summary['total_stocks_held']}",
-        f"- Total demat accounts: {summary['total_demat_accounts']}",
-    ]
-
-    if holdings:
-        lines.append("- Holdings:")
-        for item in holdings:
-            lines.append(
-                f"  - {item['stock_symbol']}: quantity {item['quantity']}, "
-                f"current price Rs. {item['current_price']:.2f}, "
-                f"current value Rs. {item['current_value']:.2f}"
-            )
-    else:
-        lines.append("- Holdings: none.")
-
-    return "\n".join(lines)
-
-
 def build_document_citation(metadata):
     """Build a short citation label from document metadata."""
 

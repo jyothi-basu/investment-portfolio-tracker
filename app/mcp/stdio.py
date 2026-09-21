@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from app.mcp.server import bind_stdio_session, create_server, reset_stdio_session
 from app.mcp.session_manager import session_manager
+from app.services import chat_service
 from app.repository import db
 
 
@@ -28,7 +29,7 @@ def run_stdio() -> None:
     load_dotenv()
     db.init_db()
     conversation_id = _configured_conversation_id()
-    chat = db.fetch_chat_by_conversation_id_unscoped(conversation_id)
+    chat = chat_service.get_chat_by_conversation_id_unscoped(conversation_id)
     if not chat:
         raise RuntimeError("MCP_CONVERSATION_ID does not identify an existing conversation.")
 

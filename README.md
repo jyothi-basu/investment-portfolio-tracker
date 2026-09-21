@@ -47,7 +47,7 @@ This project goes beyond CRUD:
 - CSRF-protected server-rendered forms
 - document ingestion with PDF page-level metadata
 - vector search with Chroma
-- LangChain tool calling with trusted server-side request context
+- LangGraph tool-calling orchestration with trusted server-side request context
 - a reusable shared registry for seven read-only business tools across AI and MCP
 - business-friendly JSON serialization at the AI tool boundary, including normalized transaction and account records
 - user- and chat-scoped document retrieval
@@ -64,7 +64,7 @@ This project started as a Flask-based portfolio tracker during the early stages 
 - FastAPI routers separated from business rules and repository code
 - SQLite-backed relational storage for users, chats, transactions, and documents
 - Chroma-backed vector store for uploaded-document retrieval
-- OpenAI-compatible and Gemini tool-calling assistant support through LangChain
+- OpenAI-compatible and Gemini tool-calling assistant support through LangGraph and LangChain provider integrations
 - Trusted request context for user and chat ownership
 - per-chat document grounding and citations
 
@@ -144,7 +144,7 @@ Example:
 - PyJWT for access and refresh token signing
 - Provider-aware chat generation and embeddings through LangChain
 - Native Gemini SDK support for chat tool calling
-- LangChain tool calling
+- LangGraph tool-calling orchestration
 - Chroma vector storage
 - MCP Python SDK for STDIO, Streamable HTTP, and legacy SSE transports
 - Argon2 for personal access token hashing
@@ -158,8 +158,13 @@ investment_portfolio_tracker/
 │   ├── ai/
 │   │   ├── __init__.py
 │   │   ├── app_help.py
-│   │   ├── chat.py
 │   │   ├── context.py
+│   │   ├── langgraph/
+│   │   │   ├── __init__.py
+│   │   │   ├── edges.py
+│   │   │   ├── graph.py
+│   │   │   ├── nodes.py
+│   │   │   └── state.py
 │   │   ├── orchestrator.py
 │   │   ├── prompts.py
 │   │   ├── provider_factory.py
@@ -390,20 +395,25 @@ The project is organized in layers:
 - `app/services/` handles business rules
 - `app/repository/` handles SQLite operations
 - `app/security/` validates JWTs and creates, verifies, and revokes MCP PATs
-- `app/ai/` handles prompt templates, trusted assistant context, LangChain tool calling, the shared read-only tool registry, and RAG helpers
+- `app/ai/` contains the LangGraph orchestrator, provider factory, trusted assistant context, shared read-only tool registry, and RAG helpers
 - `app/mcp/` shares MCP tools across STDIO and authenticated HTTP transports
 - `schema.sql` defines the database schema
-- `app.py` is no longer used
 
 ### AI Provider Architecture
 
 The project separates chat models and embedding models into independent provider factories.
 
+The production AI path is:
+
+```text
+LangGraph → shared tool registry → trusted tool wrappers → services → repository
+```
+
 Chat models:
 
 - support OpenAI-compatible chat providers through configuration
 - can use OpenAI-compatible endpoints such as OpenAI-style APIs exposed by third-party providers
-- continue to use the same tool-calling orchestration and trusted request context
+- use LangGraph for tool-calling orchestration with trusted request context
 
 Embedding models:
 

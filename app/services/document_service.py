@@ -1,11 +1,16 @@
 """Document upload and ingestion service bridging chat uploads to the RAG pipeline."""
 
 from pathlib import Path
+import logging
+import shutil
 
 from werkzeug.utils import secure_filename
 
 from app.ai.rag import add_document_chunks, chunk_text, classify_document_relevance, delete_document_chunks, load_document_text
 from app.repository import db
+
+
+logger = logging.getLogger(__name__)
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -58,7 +63,8 @@ def upload_document(chat_id, user_id, uploaded_file):
     file_path = _get_document_path(document_id, original_filename)
     try:
         _ensure_upload_dir()
-        uploaded_file.save(file_path)
+        with file_path.open("wb") as destination:
+            shutil.copyfileobj(uploaded_file.file, destination)
         db.update_document_status(document_id, user_id, "PROCESSING")
 
         extracted_text = load_document_text(file_path)
@@ -115,6 +121,13 @@ def upload_document(chat_id, user_id, uploaded_file):
         db.update_document_status(document_id, user_id, "COMPLETED")
         file_path.unlink(missing_ok=True)
     except Exception:
+        logger.exception(
+            "document.ingestion_failed document_id=%s user_id=%s chat_id=%s filename=%s",
+            document_id,
+            user_id,
+            chat_id,
+            original_filename,
+        )
         db.update_document_status(document_id, user_id, "FAILED")
         try:
             delete_document_chunks(document_id, user_id)

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 
@@ -14,18 +12,6 @@ from app.services import document_service
 
 
 router = APIRouter()
-
-
-@dataclass
-class _UploadedFileAdapter:
-    """Minimal upload-file adapter expected by the existing document service."""
-
-    filename: str
-    _content: bytes
-
-    def save(self, destination):
-        with open(destination, "wb") as file_handle:
-            file_handle.write(self._content)
 
 
 def _redirect_back(request: Request):
@@ -60,9 +46,11 @@ async def upload_document(
         flash_message(request, "Please select a chat before uploading a document.", "danger")
         return _redirect_back(request)
 
-    uploaded_bytes = await document.read()
-    adapter = _UploadedFileAdapter(filename=document.filename or "", _content=uploaded_bytes)
-    ok, message, _document_id = document_service.upload_document(selected_chat_id, user_id, adapter)
+    ok, message, _document_id = document_service.upload_document(
+        selected_chat_id,
+        user_id,
+        document,
+    )
     flash_message(request, message, "success" if ok else "danger")
     if ok:
         chat_service.touch_chat(selected_chat_id)

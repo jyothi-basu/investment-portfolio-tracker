@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, TypedDict
 
-from langchain_core.messages import AIMessage, AnyMessage, ToolCall
+from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.graph.message import add_messages
 
 
@@ -31,6 +31,7 @@ class PortfolioAssistantState(TypedDict, total=False):
 
     # Execution-only values. These are populated during one graph run and are
     # intentionally not persisted by the persistence node.
-    tool_calls: list[ToolCall] | None
+    tool_calls: list[dict[str, Any]] | None
     tool_results: list[dict[str, Any]] | None
     assistant_response: AIMessage | None
+    tool_rounds: int | None

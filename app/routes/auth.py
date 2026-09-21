@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import dataclass
 import hmac
 import secrets
@@ -10,8 +9,6 @@ import secrets
 from fastapi import HTTPException, Request, status
 from starlette.responses import Response
 
-from app.ai.context import AssistantRequestContext, push_assistant_context
-from app.repository import db
 from app.security.jwt import (
     TokenExpiredError,
     TokenPair,
@@ -19,7 +16,7 @@ from app.security.jwt import (
     decode_token,
     get_jwt_settings,
 )
-from app.services import auth_service
+from app.services import auth_service, chat_service, portfolio_service
 
 
 ACCESS_TOKEN_COOKIE = "access_token"
@@ -32,16 +29,6 @@ class RequestAuthentication:
     user_id: int | None = None
     refreshed_tokens: TokenPair | None = None
     clear_cookies: bool = False
-
-
-def _read_session_int(request: Request, key: str):
-    value = request.session.get(key)
-    if value in {None, ""}:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _bearer_token(request: Request) -> str | None:
@@ -107,7 +94,7 @@ def get_authenticated_user_id(request: Request) -> int:
     """Return the trusted user ID established by JWT middleware."""
 
     user_id = getattr(request.state, "authenticated_user_id", None)
-    if user_id is None or not db.fetch_user_by_id(user_id):
+    if user_id is None or not portfolio_service.fetch_user(user_id):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Please log in to continue.",
@@ -132,37 +119,9 @@ def get_optional_user_id(request: Request) -> int | None:
     """Return an authenticated user ID when one is available."""
 
     user_id = getattr(request.state, "authenticated_user_id", None)
-    if user_id is None or not db.fetch_user_by_id(user_id):
+    if user_id is None or not portfolio_service.fetch_user(user_id):
         return None
     return int(user_id)
-
-
-def get_active_chat_id(request: Request):
-    """Return the non-security UI preference for the last selected chat."""
-
-    return _read_session_int(request, "active_chat_id")
-
-
-def get_trusted_request_context(request: Request) -> AssistantRequestContext:
-    """Return JWT identity and the current chat after ownership validation."""
-
-    user_id = get_authenticated_user_id(request)
-    chat_id = get_active_chat_id(request)
-    if chat_id is None or not db.fetch_chat(chat_id, user_id):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A valid active chat is required for assistant requests.",
-        )
-    return AssistantRequestContext(user_id=user_id, chat_id=chat_id)
-
-
-@contextmanager
-def bind_trusted_request_context(request: Request):
-    """Bind an ownership-verified user/chat context for assistant tools."""
-
-    context = get_trusted_request_context(request)
-    with push_assistant_context(user_id=context.user_id, chat_id=context.chat_id):
-        yield context
 
 
 def set_auth_cookies(response: Response, pair: TokenPair) -> None:

@@ -1,3 +1,1 @@
-"""AI package containing the assistant provider and RAG helpers."""
-
-from .chat import *
+"""AI package containing provider, orchestration, tools, and RAG helpers."""

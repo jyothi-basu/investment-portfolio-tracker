@@ -132,7 +132,7 @@ The application shall continue to use a layered architecture.
 * `app/routes/*.py` handles HTTP requests, form submission, redirects, and flash messages.
 * `app/services/` contains business rules and portfolio calculations.
 * `app/repository/` contains SQLite database operations.
-* `app/ai/` contains chat orchestration, the shared read-only tool registry, trusted request context, prompts, and RAG helpers.
+* `app/ai/` contains LangGraph orchestration, the shared read-only tool registry, trusted request context, prompts, and RAG helpers.
 * `app/mcp/` contains shared MCP tools, STDIO, Streamable HTTP and legacy SSE transports, and ephemeral session management.
 * `schema.sql` contains the database schema definition.
 * `mcp_server.py` starts the standalone STDIO transport.
@@ -150,18 +150,19 @@ The high-level architecture shall be:
               |                          |
        Web Application          AI Research Assistant
               |                          |
-              |              +-----------+-----------+
-              |              |           |           |
-              |        Conversation   Portfolio    RAG
-              |          Context       Tools       System
-              |              |           |           |
-              |              |           |         Chroma
-              |              |           |
-              |              |       Service Layer
-              |              |           |
-              +--------------+-----------+
-                                      |
-                                    SQLite
+               |              LangGraph Orchestrator
+               |                          |
+               |                    Shared Tool Registry
+               |                          |
+               |                    Trusted Tool Wrappers
+               |                          |
+               |                      Service Layer
+               |                          |
+               |                         Chroma
+               |                          |
+               +--------------------------+
+                                       |
+                                     SQLite
 ```
 
 The AI assistant shall not directly access SQLite.
@@ -170,7 +171,7 @@ The AI assistant shall obtain portfolio information through controlled applicati
 
 Existing portfolio business logic shall be reused where appropriate.
 
-The AI assistant shall use a constrained LangChain tool-calling flow:
+The AI assistant shall use a constrained LangGraph tool-calling flow:
 
 1. The user asks a question.
 2. The model selects one or more tools.
@@ -261,7 +262,7 @@ Chat models shall:
 
 * support OpenAI-compatible chat providers through configuration
 * support OpenAI-style endpoints exposed by compatible third-party providers
-* continue using the existing tool-calling orchestration and trusted request context
+* use LangGraph for tool-calling orchestration with trusted request context
 
 Embedding models shall:
 
@@ -353,7 +354,7 @@ The current codebase has implemented the following:
 * a user-scoped conversation listing API
 * source citations for retrieved document evidence
 
-LangGraph orchestration remains a planned architectural extension. Live browser and remote MCP client regression testing remains part of final sign-off.
+LangGraph is the production orchestration engine. Live browser and remote MCP client regression testing remains part of final sign-off.
 * The application should be usable with NVDA.
 
 ---
@@ -452,7 +453,7 @@ Only stocks currently held across the user's demat accounts shall be available f
 
 The existing AI Chat Assistant shall be replaced by an AI Investment Research Assistant.
 
-The assistant shall use OpenAI for text generation and LangChain for AI orchestration.
+The assistant shall use the configured provider factory for text generation and LangGraph for AI orchestration.
 
 The assistant may use four sources of context:
 
@@ -1400,8 +1401,13 @@ investment_portfolio_tracker/
 │   ├── ai/
 │   │   ├── __init__.py
 │   │   ├── app_help.py
-│   │   ├── chat.py
 │   │   ├── context.py
+│   │   ├── langgraph/
+│   │   │   ├── __init__.py
+│   │   │   ├── edges.py
+│   │   │   ├── graph.py
+│   │   │   ├── nodes.py
+│   │   │   └── state.py
 │   │   ├── orchestrator.py
 │   │   ├── prompts.py
 │   │   ├── provider_factory.py

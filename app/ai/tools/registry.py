@@ -1,6 +1,7 @@
 """Single registry for shared AI and MCP business tools."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 import json
 import logging
 
@@ -32,6 +33,18 @@ SHARED_TOOL_NAMES = (
     "get_application_help",
 )
 
+
+@dataclass(frozen=True)
+class ToolSpec:
+    """Backend-owned execution policy for one registered assistant tool."""
+
+    name: str
+    handler: Callable
+    category: str
+    read_only: bool
+    parallel_safe: bool
+    retryable: bool
+
 _ASSISTANT_TOOLS = (
     *PORTFOLIO_ASSISTANT_TOOLS,
     search_uploaded_documents,
@@ -51,10 +64,37 @@ def _assistant_result(tool, args):
     return ToolExecutionResult(content=content, citations=citations)
 
 
-TOOL_REGISTRY: dict[str, Callable[..., ToolExecutionResult]] = {
-    tool.name: (lambda args, tool=tool: _assistant_result(tool, args))
+_TOOL_POLICIES = {
+    "get_portfolio_summary": ("portfolio", True, True, True),
+    "get_holdings": ("portfolio", True, True, True),
+    "get_transactions": ("portfolio", True, True, True),
+    "get_stock_prices": ("portfolio", True, True, True),
+    "get_demat_accounts": ("portfolio", True, True, True),
+    "search_uploaded_documents": ("documents", True, True, True),
+    "get_application_help": ("application", True, True, False),
+}
+
+
+TOOL_REGISTRY: dict[str, ToolSpec] = {
+    tool.name: ToolSpec(
+        name=tool.name,
+        handler=lambda args, tool=tool: _assistant_result(tool, args),
+        category=_TOOL_POLICIES[tool.name][0],
+        read_only=_TOOL_POLICIES[tool.name][1],
+        parallel_safe=_TOOL_POLICIES[tool.name][2],
+        retryable=_TOOL_POLICIES[tool.name][3],
+    )
     for tool in _ASSISTANT_TOOLS
 }
+
+
+def get_tool_spec(tool_name):
+    """Return the trusted execution specification for a shared tool."""
+
+    spec = TOOL_REGISTRY.get(tool_name)
+    if spec is None:
+        raise ValueError(f"Unknown tool requested by the model: {tool_name}")
+    return spec
 
 
 def get_assistant_tools():
@@ -66,9 +106,7 @@ def get_assistant_tools():
 def execute_tool_call(tool_name, tool_args=None):
     """Execute a model-selected tool using trusted request context."""
 
-    executor = TOOL_REGISTRY.get(tool_name)
-    if executor is None:
-        raise ValueError(f"Unknown tool requested by the model: {tool_name}")
+    executor = get_tool_spec(tool_name).handler
     try:
         return executor(tool_args if isinstance(tool_args, dict) else {})
     except Exception:

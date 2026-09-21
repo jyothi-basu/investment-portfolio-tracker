@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Request
 
-from app.ai.chat import ChatServiceError
-from app.ai.orchestrator import generate_chat_response
+from app.ai.orchestrator import ChatServiceError, generate_chat_response
 from app.routes.auth import get_optional_user_id, validate_csrf_token
 from app.routes.common import flash_message, parse_int, redirect_to, render_template
 from app.services import chat_service
-from app.services.chat_title_service import generate_title_if_needed
 from app.services import document_service
 
 
@@ -85,16 +85,13 @@ async def chat_page(request: Request):
             history_rows = chat_service.list_messages(selected_chat_id, user_id)
             history = _build_history(history_rows)
             try:
-                chat_service.add_user_message(selected_chat_id, user_message)
-                generate_title_if_needed(selected_chat_id, user_id, user_message)
-                assistant_reply = generate_chat_response(
+                assistant_reply = await asyncio.to_thread(
+                    generate_chat_response,
                     user_message=user_message,
                     user_id=user_id,
                     chat_id=selected_chat_id,
                     history=history,
                 )
-                chat_service.add_assistant_message(selected_chat_id, assistant_reply)
-                chat_service.touch_chat(selected_chat_id)
                 request.session["active_chat_id"] = selected_chat_id
                 return redirect_to(request, "chat_page", chat_id=selected_chat_id)
             except ChatServiceError as exc:
