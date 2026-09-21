@@ -253,6 +253,20 @@ Chroma shall be used for semantic retrieval of financial-document information.
 * LangChain Core
 * LangChain OpenAI integration
 * LangChain Chroma integration
+* LangGraph
+
+## Automated Testing
+
+The project shall use `pytest` as its automated test framework. The test suite shall cover:
+
+* JWT and PAT authentication boundaries
+* MCP transport and session isolation
+* LangGraph routing and tool-execution contracts
+* shared AI tool serialization and execution metadata
+* RAG loading and chunking behavior
+* FastAPI document-upload and ingestion boundaries
+
+Tests shall remain focused on application behavior and architecture contracts rather than depending unnecessarily on the current SQLite implementation, so they remain useful during future database-layer migrations.
 
 ## AI Provider Architecture
 
@@ -354,7 +368,8 @@ The current codebase has implemented the following:
 * a user-scoped conversation listing API
 * source citations for retrieved document evidence
 
-LangGraph is the production orchestration engine. Live browser and remote MCP client regression testing remains part of final sign-off.
+LangGraph is the production orchestration engine.
+The pytest suite and live browser/MCP client regression testing remain part of final sign-off.
 * The application should be usable with NVDA.
 
 ---
@@ -1434,16 +1449,30 @@ investment_portfolio_tracker/
 │   │   ├── documents.py
 │   │   ├── portfolio.py
 │   │   └── public.py
+│   ├── mcp/
+│   │   ├── __init__.py
+│   │   ├── server.py
+│   │   ├── session_manager.py
+│   │   ├── sse.py
+│   │   ├── streamable_http.py
+│   │   └── stdio.py
 │   ├── repository/
 │   │   ├── __init__.py
 │   │   └── db.py
+│   ├── security/
+│   │   ├── __init__.py
+│   │   ├── jwt.py
+│   │   └── personal_access_tokens.py
 │   └── services/
 │       ├── __init__.py
+│       ├── auth_service.py
 │       ├── chat_service.py
+│       ├── chat_title_service.py
 │       ├── document_service.py
 │       └── portfolio_service.py
 ├── schema.sql
 ├── requirements.txt
+├── pytest.ini
 ├── README.md
 ├── SRS.md
 ├── portfolio.db
@@ -1464,9 +1493,17 @@ investment_portfolio_tracker/
 │   ├── register.html
 │   ├── stock_prices.html
 │   └── transactions.html
-└── data/
-    ├── chroma/
-    └── uploads/
+├── data/
+│   ├── chroma/
+│   └── uploads/
+└── tests/
+│   ├── test_ai_tools_architecture.py
+│   ├── test_jwt_auth.py
+│   ├── test_langgraph_architecture.py
+│   ├── test_mcp_auth.py
+│   ├── test_mcp_sessions.py
+│   ├── test_rag_unit.py
+│   └── test_upload_boundary.py
 ```
 
 The temporary uploaded document does not need to have a permanent directory.
@@ -1514,6 +1551,7 @@ The project shall be considered complete when:
 * The standalone STDIO MCP server exposes the shared portfolio, document-search, and application-help tools to a compatible MCP client.
 * The authenticated MCP HTTP transports reject missing, invalid, expired, and revoked PATs.
 * MCP conversation listing and selection never expose internal chat IDs.
+* The pytest suite passes for authentication, MCP, LangGraph, AI tools, RAG boundaries, and document-upload behavior.
 * Users can view holdings.
 * Users can view demat account-wise summaries.
 * Users can view portfolio summaries.

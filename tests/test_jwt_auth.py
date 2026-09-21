@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import unittest
 import uuid
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -15,8 +15,8 @@ from app.services import auth_service, portfolio_service
 from main import create_fastapi_app
 
 
-class JWTAuthenticationTests(unittest.TestCase):
-    def setUp(self):
+class TestJWTAuthentication:
+    def setup_method(self):
         self.original_db_path = db.DB_PATH
         self.original_environment = {
             name: os.environ.get(name)
@@ -43,7 +43,7 @@ class JWTAuthenticationTests(unittest.TestCase):
             "password123",
         )
 
-    def tearDown(self):
+    def teardown_method(self):
         db.DB_PATH = self.original_db_path
         for name, value in self.original_environment.items():
             if value is None:
@@ -78,11 +78,8 @@ class JWTAuthenticationTests(unittest.TestCase):
             original_pair.refresh_token
         )
 
-        self.assertEqual(
-            decode_token(replacement_pair.access_token, "access")["user_id"],
-            user["user_id"],
-        )
-        with self.assertRaises(TokenValidationError):
+        assert decode_token(replacement_pair.access_token, "access")["user_id"] == user["user_id"]
+        with pytest.raises(TokenValidationError):
             auth_service.rotate_refresh_token(original_pair.refresh_token)
 
     def test_browser_login_uses_jwt_cookies_and_refreshes_access(self):
@@ -90,15 +87,15 @@ class JWTAuthenticationTests(unittest.TestCase):
         with TestClient(app) as client:
             login_response = self._login_browser(client)
 
-            self.assertEqual(login_response.status_code, 303)
-            self.assertIsNotNone(client.cookies.get("access_token"))
+            assert login_response.status_code == 303
+            assert client.cookies.get("access_token") is not None
             original_refresh = client.cookies.get("refresh_token")
-            self.assertIsNotNone(original_refresh)
-            self.assertEqual(client.get("/dashboard").status_code, 200)
+            assert original_refresh is not None
+            assert client.get("/dashboard").status_code == 200
 
             client.cookies.delete("access_token")
-            self.assertEqual(client.get("/dashboard").status_code, 200)
-            self.assertNotEqual(client.cookies.get("refresh_token"), original_refresh)
+            assert client.get("/dashboard").status_code == 200
+            assert client.cookies.get("refresh_token") != original_refresh
 
     def test_bearer_access_token_authenticates_without_cookies(self):
         user = portfolio_service.authenticate_user(
@@ -114,7 +111,7 @@ class JWTAuthenticationTests(unittest.TestCase):
                 headers={"Authorization": f"Bearer {pair.access_token}"},
             )
 
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
 
     def test_logout_revokes_refresh_token_and_clears_cookies(self):
         app = create_fastapi_app()
@@ -132,10 +129,10 @@ class JWTAuthenticationTests(unittest.TestCase):
                 follow_redirects=False,
             )
 
-            self.assertEqual(response.status_code, 303)
-            self.assertIsNone(client.cookies.get("access_token"))
-            self.assertIsNone(client.cookies.get("refresh_token"))
-            with self.assertRaises(TokenValidationError):
+            assert response.status_code == 303
+            assert client.cookies.get("access_token") is None
+            assert client.cookies.get("refresh_token") is None
+            with pytest.raises(TokenValidationError):
                 auth_service.rotate_refresh_token(refresh_token)
 
     def test_state_changing_form_rejects_missing_csrf_token(self):
@@ -144,7 +141,7 @@ class JWTAuthenticationTests(unittest.TestCase):
             self._login_browser(client)
             response = client.post("/accounts", data={"broker_name": "Example"})
 
-        self.assertEqual(response.status_code, 403)
+        assert response.status_code == 403
 
     def test_chat_id_is_checked_against_authenticated_user(self):
         own_chat_id = db.create_chat(self.user["user_id"], "Owned chat")
@@ -167,8 +164,8 @@ class JWTAuthenticationTests(unittest.TestCase):
                 follow_redirects=False,
             )
 
-        self.assertEqual(response.status_code, 303)
-        self.assertIn(f"chat_id={own_chat_id}", response.headers["location"])
+        assert response.status_code == 303
+        assert f"chat_id={own_chat_id}" in response.headers["location"]
 
     def test_authenticated_server_rendered_pages_still_load(self):
         app = create_fastapi_app()
@@ -184,10 +181,5 @@ class JWTAuthenticationTests(unittest.TestCase):
                 "/portfolio-summary",
                 "/chat",
             ):
-                with self.subTest(path=path):
-                    response = client.get(path)
-                    self.assertEqual(response.status_code, 200)
-
-
-if __name__ == "__main__":
-    unittest.main()
+                response = client.get(path)
+                assert response.status_code == 200, path

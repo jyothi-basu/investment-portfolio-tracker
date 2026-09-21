@@ -2,9 +2,9 @@
 
 Investment Portfolio Tracker is a portfolio-quality FastAPI Python backend for tracking stock portfolios across multiple demat accounts. Its defining feature is a multi-source, tool-calling AI assistant that combines backend portfolio tools, uploaded-document retrieval, and application-help guidance in a layered application design.
 
-The document RAG pipeline is available through two transports:
+The document RAG pipeline is available through the web assistant and MCP transports:
 
-- the existing FastAPI + LangChain assistant
+- the FastAPI web assistant, orchestrated with LangGraph and provider integrations from LangChain
 - a separate STDIO MCP server for Codex CLI and other MCP clients
 - a PAT-authenticated Streamable HTTP MCP transport for remote clients
 
@@ -20,6 +20,17 @@ The current implementation includes:
 - a provider-aware AI layer that can target OpenAI-compatible backends or Gemini's native SDK through environment settings
 
 This project demonstrates Python backend engineering, database design, and AI orchestration.
+
+## Portfolio Project Focus
+
+This repository is designed to demonstrate the skills expected from a remote Python backend developer who integrates AI into existing applications:
+
+- production-style FastAPI routing with service and repository boundaries
+- secure JWT and PAT authentication with user-scoped access control
+- provider-agnostic LLM integration with LangGraph tool orchestration
+- reusable AI and MCP tools integrated with existing backend services
+- RAG ingestion, retrieval, source citations, and per-chat isolation
+- automated pytest coverage for authentication, MCP, AI tools, LangGraph, RAG, and upload boundaries
 
 ## What This App Does
 
@@ -54,6 +65,7 @@ This project goes beyond CRUD:
 - source citations for assistant answers
 - a separate STDIO MCP interface that reuses the same RAG pipeline
 - an authenticated Streamable HTTP MCP interface with user-scoped conversation selection
+- a pytest suite covering security boundaries, orchestration contracts, and integration behavior
 
 ## Project Evolution
 
@@ -148,6 +160,7 @@ Example:
 - Chroma vector storage
 - MCP Python SDK for STDIO, Streamable HTTP, and legacy SSE transports
 - Argon2 for personal access token hashing
+- pytest for automated backend and AI integration testing
 
 ### Project Structure
 
@@ -215,6 +228,7 @@ investment_portfolio_tracker/
 │       └── portfolio_service.py
 ├── schema.sql
 ├── requirements.txt
+├── pytest.ini
 ├── README.md
 ├── SRS.md
 ├── portfolio.db
@@ -224,7 +238,7 @@ investment_portfolio_tracker/
 ├── static/
 │   ├── style.css
 │   └── script.js
-└── templates/
+├── templates/
     ├── base.html
     ├── home.html
     ├── login.html
@@ -235,7 +249,15 @@ investment_portfolio_tracker/
     ├── stock_prices.html
     ├── holdings.html
     ├── account_summary.html
-    └── portfolio_summary.html
+│   └── portfolio_summary.html
+└── tests/
+│   ├── test_ai_tools_architecture.py
+│   ├── test_jwt_auth.py
+│   ├── test_langgraph_architecture.py
+│   ├── test_mcp_auth.py
+│   ├── test_mcp_sessions.py
+│   ├── test_rag_unit.py
+│   └── test_upload_boundary.py
 ```
 
 ### Setup Instructions
@@ -276,17 +298,21 @@ pip install -r requirements.txt
 uvicorn main:app
 ```
 
-On Linux/macOS, the equivalent is:
-
-```bash
-uvicorn main:app
-```
-
 6. Open the browser at the local address shown in the terminal, usually:
 
 ```text
 http://127.0.0.1:8000
 ```
+
+### Run the tests
+
+The automated suite uses `pytest` and currently contains 36 tests covering authentication, MCP security, LangGraph orchestration, shared AI tools, RAG boundaries, and document-upload behavior:
+
+```bash
+python -m pytest -q
+```
+
+The suite intentionally emphasizes framework and architecture behavior rather than coupling every test to the current SQLite implementation, which keeps the tests useful during the planned database-layer migration.
 
 ### MCP Transports
 
@@ -539,6 +565,7 @@ This project is a solid example of Python backend work because it demonstrates:
 - trusted tool calling with LLMs
 - reusable AI/MCP tool contracts with structured business outputs
 - per-chat source isolation
+- pytest-based regression and architecture tests
 
 ### Authentication
 

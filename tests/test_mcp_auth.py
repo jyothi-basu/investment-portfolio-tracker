@@ -10,9 +10,9 @@ import socket
 import sqlite3
 import threading
 import time
-import unittest
 import uuid
 from unittest.mock import Mock, patch
+import pytest
 
 from fastapi.testclient import TestClient
 from mcp import ClientSession
@@ -33,8 +33,8 @@ from app.services.chat_title_service import generate_title_if_needed, is_greetin
 from main import create_fastapi_app
 
 
-class MCPAuthenticationTests(unittest.TestCase):
-    def setUp(self):
+class TestMCPAuthentication:
+    def setup_method(self):
         self.original_db_path = db.DB_PATH
         self.original_environment = {
             name: os.environ.get(name)
@@ -52,7 +52,7 @@ class MCPAuthenticationTests(unittest.TestCase):
         self.user_one = portfolio_service.authenticate_user("one@example.com", "password123")
         self.user_two = portfolio_service.authenticate_user("two@example.com", "password123")
 
-    def tearDown(self):
+    def teardown_method(self):
         db.DB_PATH = self.original_db_path
         for name, value in self.original_environment.items():
             if value is None:
@@ -87,23 +87,20 @@ class MCPAuthenticationTests(unittest.TestCase):
             issued.token.split("_", 3)[2]
         )
 
-        self.assertTrue(issued.token.startswith("ipt_pat_"))
-        self.assertTrue(stored["token_hash"].startswith("$argon2"))
-        self.assertNotIn(issued.token, tuple(stored))
-        self.assertEqual(
-            authenticate_personal_access_token(issued.token),
-            self.user_one["user_id"],
-        )
-        self.assertIsNotNone(
+        assert issued.token.startswith("ipt_pat_")
+        assert stored["token_hash"].startswith("$argon2")
+        assert issued.token not in tuple(stored)
+        assert authenticate_personal_access_token(issued.token) == self.user_one["user_id"]
+        assert (
             db.fetch_personal_access_token_by_selector(stored["token_selector"])[
                 "last_used_at"
             ]
-        )
+        ) is not None
 
     def test_revoked_and_expired_pats_are_rejected(self):
         issued = create_personal_access_token(self.user_one["user_id"], "Temporary")
         db.revoke_personal_access_token(issued.token_id, self.user_one["user_id"])
-        with self.assertRaises(PersonalAccessTokenError):
+        with pytest.raises(PersonalAccessTokenError):
             authenticate_personal_access_token(issued.token)
 
         expiry = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
@@ -114,7 +111,7 @@ class MCPAuthenticationTests(unittest.TestCase):
             "UPDATE personal_access_tokens SET expires_at = ? WHERE token_id = ?",
             ((datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(), expired.token_id),
         )
-        with self.assertRaises(PersonalAccessTokenError):
+        with pytest.raises(PersonalAccessTokenError):
             authenticate_personal_access_token(expired.token)
 
     def test_pat_management_uses_jwt_and_never_lists_raw_tokens(self):
@@ -132,11 +129,11 @@ class MCPAuthenticationTests(unittest.TestCase):
                 headers=headers,
             )
 
-        self.assertEqual(created.status_code, 201)
-        self.assertIn("token", created.json())
-        self.assertEqual(listed.status_code, 200)
-        self.assertNotIn("token", listed.json()[0])
-        self.assertEqual(revoked.status_code, 204)
+        assert created.status_code == 201
+        assert "token" in created.json()
+        assert listed.status_code == 200
+        assert "token" not in listed.json()[0]
+        assert revoked.status_code == 204
 
     def test_browser_pat_page_displays_raw_token_only_after_creation(self):
         app = create_fastapi_app()
@@ -163,14 +160,14 @@ class MCPAuthenticationTests(unittest.TestCase):
                 follow_redirects=False,
             )
 
-        self.assertEqual(created.status_code, 200)
-        self.assertTrue(raw_token.startswith("ipt_pat_"))
-        self.assertNotIn(raw_token, revisited.text)
-        self.assertNotIn(raw_token, client.cookies.get("session", ""))
-        self.assertEqual(revoked.status_code, 303)
-        self.assertIsNotNone(
+        assert created.status_code == 200
+        assert raw_token.startswith("ipt_pat_")
+        assert raw_token not in revisited.text
+        assert raw_token not in client.cookies.get("session", "")
+        assert revoked.status_code == 303
+        assert (
             db.fetch_personal_access_tokens(self.user_one["user_id"])[0]["revoked_at"]
-        )
+        ) is not None
 
     def test_conversation_listing_is_user_scoped_and_hides_chat_id(self):
         own_chat = db.create_chat(self.user_one["user_id"], "Annual report")
@@ -185,13 +182,13 @@ class MCPAuthenticationTests(unittest.TestCase):
                 headers=self._jwt_headers(self.user_one["user_id"]),
             )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()), 1)
+        assert response.status_code == 200
+        assert len(response.json()) == 1
         summary = response.json()[0]
-        self.assertNotIn("chat_id", summary)
-        self.assertEqual(summary["chat_title"], "Annual report")
-        self.assertEqual(summary["message_count"], 1)
-        self.assertEqual(summary["uploaded_documents"], ["report.pdf"])
+        assert "chat_id" not in summary
+        assert summary["chat_title"] == "Annual report"
+        assert summary["message_count"] == 1
+        assert summary["uploaded_documents"] == ["report.pdf"]
 
     def test_conversation_listing_accepts_pat_identity(self):
         db.create_chat(self.user_one["user_id"], "PAT conversation")
@@ -204,8 +201,8 @@ class MCPAuthenticationTests(unittest.TestCase):
                 headers={"Authorization": f"Bearer {issued.token}"},
             )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()[0]["chat_title"], "PAT conversation")
+        assert response.status_code == 200
+        assert response.json()[0]["chat_title"] == "PAT conversation"
 
     def test_mcp_messages_require_pat_not_jwt(self):
         issued = create_personal_access_token(self.user_one["user_id"], "MCP")
@@ -223,9 +220,9 @@ class MCPAuthenticationTests(unittest.TestCase):
                 json={},
             )
 
-        self.assertEqual(unauthenticated_sse.status_code, 401)
-        self.assertEqual(pat_response.status_code, 404)
-        self.assertEqual(jwt_response.status_code, 401)
+        assert unauthenticated_sse.status_code == 401
+        assert pat_response.status_code == 404
+        assert jwt_response.status_code == 401
 
     def test_authenticated_sse_lists_selects_and_searches_conversation(self):
         chat_id = db.create_chat(self.user_one["user_id"], "Aster report")
@@ -293,16 +290,14 @@ class MCPAuthenticationTests(unittest.TestCase):
             deadline = time.monotonic() + 5
             while not server.started and time.monotonic() < deadline:
                 time.sleep(0.02)
-            self.assertTrue(server.started)
+            assert server.started
             try:
                 tools, listed, selected, rejected, searched = asyncio.run(exercise_client())
             finally:
                 server.should_exit = True
                 thread.join(timeout=5)
 
-        self.assertEqual(
-            {tool.name for tool in tools.tools},
-            {
+        assert {tool.name for tool in tools.tools} == {
                 "list_conversations",
                 "select_conversation",
                 "get_portfolio_summary",
@@ -312,15 +307,14 @@ class MCPAuthenticationTests(unittest.TestCase):
                 "get_demat_accounts",
                 "search_uploaded_documents",
                 "get_application_help",
-            },
-        )
-        self.assertIn(chat["conversation_id"], listed.content[0].text)
-        self.assertFalse(selected.isError)
-        self.assertTrue(rejected.isError)
-        self.assertIn("Rs. 1,240 crore", searched.content[0].text)
-        self.assertIn("Rs. 860 crore", searched.content[0].text)
-        self.assertIn("Aster_Report.pdf", searched.content[0].text)
-        self.assertIn("Nova_Report.pdf", searched.content[0].text)
+        }
+        assert chat["conversation_id"] in listed.content[0].text
+        assert not selected.isError
+        assert rejected.isError
+        assert "Rs. 1,240 crore" in searched.content[0].text
+        assert "Rs. 860 crore" in searched.content[0].text
+        assert "Aster_Report.pdf" in searched.content[0].text
+        assert "Nova_Report.pdf" in searched.content[0].text
 
     def test_codex_streamable_http_discovers_and_calls_tools(self):
         chat_id = db.create_chat(self.user_one["user_id"], "Streamable report")
@@ -374,16 +368,14 @@ class MCPAuthenticationTests(unittest.TestCase):
             deadline = time.monotonic() + 5
             while not server.started and time.monotonic() < deadline:
                 time.sleep(0.02)
-            self.assertTrue(server.started)
+            assert server.started
             try:
                 tools, selected, searched, session_id = asyncio.run(exercise_client())
             finally:
                 server.should_exit = True
                 thread.join(timeout=5)
 
-        self.assertEqual(
-            {tool.name for tool in tools.tools},
-            {
+        assert {tool.name for tool in tools.tools} == {
                 "list_conversations",
                 "select_conversation",
                 "get_portfolio_summary",
@@ -393,18 +385,17 @@ class MCPAuthenticationTests(unittest.TestCase):
                 "get_demat_accounts",
                 "search_uploaded_documents",
                 "get_application_help",
-            },
-        )
-        self.assertIsNotNone(session_id)
-        self.assertFalse(selected.isError)
-        self.assertIn("Rs. 1,240 crore", searched.content[0].text)
+        }
+        assert session_id is not None
+        assert not selected.isError
+        assert "Rs. 1,240 crore" in searched.content[0].text
 
     def test_title_generation_skips_greetings_and_runs_once(self):
         chat_id = db.create_chat(self.user_one["user_id"])
-        self.assertTrue(is_greeting_only("Hi, thanks!"))
-        self.assertIsNone(
+        assert is_greeting_only("Hi, thanks!")
+        assert (
             generate_title_if_needed(chat_id, self.user_one["user_id"], "Hello")
-        )
+        ) is None
 
         model = Mock()
         model.invoke.return_value = Mock(content="Compare Aster and Nova Revenue Today")
@@ -420,11 +411,11 @@ class MCPAuthenticationTests(unittest.TestCase):
                 "A different meaningful question",
             )
 
-        self.assertEqual(title, "Compare Aster and Nova Revenue Today")
-        self.assertEqual(model.invoke.call_count, 1)
+        assert title == "Compare Aster and Nova Revenue Today"
+        assert model.invoke.call_count == 1
 
 
-class ConversationMigrationTests(unittest.TestCase):
+class TestConversationMigration:
     def test_existing_chat_receives_public_uuid(self):
         original_db_path = db.DB_PATH
         test_db_path = Path(__file__).resolve().parent / f".migration-{uuid.uuid4().hex}.db"
@@ -455,11 +446,7 @@ class ConversationMigrationTests(unittest.TestCase):
             db.init_db()
             migrated = db.fetch_chat(1, 1)
 
-            self.assertEqual(str(uuid.UUID(migrated["conversation_id"])), migrated["conversation_id"])
+            assert str(uuid.UUID(migrated["conversation_id"])) == migrated["conversation_id"]
         finally:
             db.DB_PATH = original_db_path
             test_db_path.unlink(missing_ok=True)
-
-
-if __name__ == "__main__":
-    unittest.main()
