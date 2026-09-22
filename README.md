@@ -239,25 +239,26 @@ investment_portfolio_tracker/
 │   ├── style.css
 │   └── script.js
 ├── templates/
-    ├── base.html
-    ├── home.html
-    ├── login.html
-    ├── register.html
-    ├── dashboard.html
-    ├── demat_accounts.html
-    ├── transactions.html
-    ├── stock_prices.html
-    ├── holdings.html
-    ├── account_summary.html
+│   ├── base.html
+│   ├── home.html
+│   ├── login.html
+│   ├── register.html
+│   ├── dashboard.html
+│   ├── demat_accounts.html
+│   ├── transactions.html
+│   ├── stock_prices.html
+│   ├── holdings.html
+│   ├── account_summary.html
 │   └── portfolio_summary.html
 └── tests/
-│   ├── test_ai_tools_architecture.py
-│   ├── test_jwt_auth.py
-│   ├── test_langgraph_architecture.py
-│   ├── test_mcp_auth.py
-│   ├── test_mcp_sessions.py
-│   ├── test_rag_unit.py
-│   └── test_upload_boundary.py
+    ├── test_ai_tools_architecture.py
+    ├── test_embedding_provider_factory.py
+    ├── test_jwt_auth.py
+    ├── test_langgraph_architecture.py
+    ├── test_mcp_auth.py
+    ├── test_mcp_sessions.py
+    ├── test_rag_unit.py
+    └── test_upload_boundary.py
 ```
 
 ### Setup Instructions
@@ -306,7 +307,7 @@ http://127.0.0.1:8000
 
 ### Run the tests
 
-The automated suite uses `pytest` and currently contains 36 tests covering authentication, MCP security, LangGraph orchestration, shared AI tools, RAG boundaries, and document-upload behavior:
+The automated suite uses `pytest` and currently contains 40 tests covering authentication, MCP security, LangGraph orchestration, shared AI tools, embedding-provider selection, RAG boundaries, and document-upload behavior:
 
 ```bash
 python -m pytest -q
@@ -435,18 +436,36 @@ The production AI path is:
 LangGraph → shared tool registry → trusted tool wrappers → services → repository
 ```
 
-Chat models:
+Chat and embedding providers are selected independently. Current support is:
 
-- support OpenAI-compatible chat providers through configuration
-- can use OpenAI-compatible endpoints such as OpenAI-style APIs exposed by third-party providers
-- use LangGraph for tool-calling orchestration with trusted request context
+| Capability | Provider value | Client / implementation | Configuration notes |
+| --- | --- | --- | --- |
+| Chat | `openai` | LangChain `ChatOpenAI` | Uses OpenAI's API; provide `LLM_API_KEY`. |
+| Chat | `openai-compatible` | LangChain `ChatOpenAI` | Requires `LLM_BASE_URL`; supports compatible services such as local Ollama during development. |
+| Chat | `gemini` | LangChain `ChatGoogleGenerativeAI` | Uses Gemini with `LLM_API_KEY`; no OpenAI-compatible base URL is used. |
+| Embeddings | `openai` | LangChain `OpenAIEmbeddings` | Uses OpenAI's embedding API. |
+| Embeddings | `openai-compatible` | LangChain `OpenAIEmbeddings` | Requires `EMBEDDINGS_BASE_URL`. |
+| Embeddings | `gemini` | LangChain `GoogleGenerativeAIEmbeddings` | Uses Google AI Studio and `gemini-embedding-001`; no base URL is required. |
+| Embeddings | `local` | `LocalSentenceTransformerEmbeddings` | Runs a SentenceTransformer model locally; no embedding API key is required. |
 
-Embedding models:
+For chat, `LLM_API_KEY` falls back to `OPENAI_API_KEY`. For embeddings, the key lookup order is `EMBEDDINGS_API_KEY`, `LLM_API_KEY`, then `OPENAI_API_KEY`. OpenAI-compatible chat and embedding providers require their respective base URL settings. Local Ollama is a development/testing choice, not a separate provider value; it uses `LLM_PROVIDER=openai-compatible`.
 
-- support OpenAI-compatible embedding APIs
-- support local SentenceTransformer embedding models configured through `EMBEDDINGS_MODEL`
+LangGraph orchestrates chat-model tool calling with trusted request context.
 
 Design principle: chat generation, document embeddings, document relevance validation, and MCP document search all obtain models through the shared provider factory layer, so compatible providers can be swapped through configuration instead of code changes.
+
+#### Local Ollama for Development
+
+For local development and testing, Ollama can provide the chat model through the existing `openai-compatible` provider. Start Ollama, pull a model that supports tool calling, and configure:
+
+```env
+LLM_PROVIDER=openai-compatible
+LLM_MODEL=<model name from ollama list>
+LLM_API_KEY=ollama
+LLM_BASE_URL=http://localhost:11434/v1
+```
+
+The non-empty `LLM_API_KEY` is required by the OpenAI-compatible client; Ollama's local endpoint ignores its value. The application calls the Ollama server, which runs the model locally. This is a development/testing setup only: this project's Render deployment is not configured to reach a developer machine's `localhost` Ollama server. Keep the production LLM configuration pointed at a provider reachable from the deployed application.
 
 The assistant uses a tool-calling flow:
 
@@ -472,11 +491,26 @@ Portfolio services continue to receive explicit `user_id` arguments. AI wrappers
 
 All MCP transports follow the same retrieval path. Local STDIO resolves `MCP_CONVERSATION_ID` at startup. Streamable HTTP and legacy SSE resolve the authenticated user from a PAT and store the selected public conversation UUID in an in-memory session; ownership is checked before the UUID is mapped to the internal chat ID.
 
-### Embedding Provider Compatibility
+### Embedding Provider Configuration
 
-This project allows you to choose different providers for chat models and embedding models through environment variables.
+Select the embedding backend independently with `EMBEDDINGS_PROVIDER`.
 
-#### Important
+#### Gemini Embeddings (Google AI Studio)
+
+Use the native LangChain Google GenAI embedding integration with a Google AI Studio API key:
+
+```env
+EMBEDDINGS_PROVIDER=gemini
+EMBEDDINGS_MODEL=gemini-embedding-001
+EMBEDDINGS_API_KEY=your_google_ai_studio_api_key
+EMBEDDINGS_BASE_URL=
+```
+
+`EMBEDDINGS_BASE_URL` is not required for Gemini. You may leave `EMBEDDINGS_API_KEY` empty to reuse `LLM_API_KEY` when it contains the same Google AI Studio key. The local SentenceTransformer implementation is not loaded for this provider.
+
+Re-index uploaded documents after switching providers or models. Existing Chroma vectors were generated in the previous model's embedding space and are not interchangeable with the new vectors.
+
+#### Re-indexing after a provider change
 
 If you change the embedding provider or embedding model after documents have already been indexed, you must rebuild the ChromaDB vector database.
 
@@ -489,12 +523,13 @@ Embedding vectors generated by different models live in different vector spaces.
 - Changing `EMBEDDINGS_PROVIDER`
 - Changing `EMBEDDINGS_MODEL`
 - Switching between cloud and local embedding models
+- Switching between OpenAI-compatible and Gemini embeddings
 
 #### What happens if you don't?
 
 Document search may return poor or incorrect results because query embeddings and stored document embeddings were generated by different models.
 
-After changing the embedding configuration, delete the existing ChromaDB collection or re-index your uploaded documents.
+After changing the embedding configuration, delete and recreate the existing ChromaDB collection or re-index your uploaded documents into a fresh collection.
 
 ### Local Embeddings
 

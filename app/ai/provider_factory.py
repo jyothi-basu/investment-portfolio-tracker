@@ -3,8 +3,8 @@
 The AI layer uses this module as a single decision point for model selection.
 It keeps the rest of the codebase agnostic to the concrete provider while still
 supporting OpenAI-compatible or Gemini chat endpoints and either
-OpenAI-compatible or local SentenceTransformer embeddings through environment
-config.
+OpenAI-compatible, Gemini, or local SentenceTransformer embeddings through
+environment config.
 """
 
 from __future__ import annotations
@@ -85,11 +85,11 @@ def _normalize_provider(provider):
 def _normalize_embedding_provider(provider):
     normalized = _first_non_empty(provider, default="openai").lower()
     normalized = normalized.replace(" ", "-").replace("_", "-")
-    if normalized in {"openai", "openai-compatible", "local"}:
+    if normalized in {"openai", "openai-compatible", "gemini", "local"}:
         return normalized
     raise ProviderConfigurationError(
         f"Unsupported embedding provider {provider!r}. Supported providers are: "
-        "openai, openai-compatible, local."
+        "openai, openai-compatible, gemini, local."
     )
 
 
@@ -203,6 +203,8 @@ def _read_embedding_settings(default_model=DEFAULT_EMBEDDING_MODEL):
         raise ProviderConfigurationError(
             "EMBEDDINGS_BASE_URL is required for openai-compatible providers."
         )
+    if provider == "gemini":
+        base_url = None
 
     return ProviderSettings(provider=provider, api_key=api_key, model=model, base_url=base_url or None)
 
@@ -247,6 +249,21 @@ def create_embedding_model(*, default_model=DEFAULT_EMBEDDING_MODEL):
 
     if settings.provider == "local":
         return LocalSentenceTransformerEmbeddings(model_name=settings.model)
+
+    if settings.provider == "gemini":
+        try:
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        except ImportError as exc:
+            raise ProviderConfigurationError(
+                "EMBEDDINGS_PROVIDER=gemini requires the langchain-google-genai package. "
+                "Install it with: pip install langchain-google-genai"
+            ) from exc
+
+        return GoogleGenerativeAIEmbeddings(
+            model=settings.model,
+            google_api_key=settings.api_key,
+            vertexai=False,
+        )
 
     return OpenAIEmbeddings(
         model=settings.model,

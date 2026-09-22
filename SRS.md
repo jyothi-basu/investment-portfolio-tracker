@@ -32,7 +32,7 @@ The project demonstrates the practical use of:
 * Semantic retrieval
 * AI tools
 * Retrieval-Augmented Generation
-* provider-aware chat and embedding clients, including local SentenceTransformer embeddings
+* provider-aware chat and embedding clients, including Gemini, OpenAI-compatible, and local SentenceTransformer embeddings
 
 The application is built using Python, FastAPI, SQLite, Bootstrap, HTML, CSS, and JavaScript.
 
@@ -274,16 +274,22 @@ The project shall separate chat models and embedding models into independent pro
 
 Chat models shall:
 
-* support OpenAI-compatible chat providers through configuration
-* support OpenAI-style endpoints exposed by compatible third-party providers
+* support provider values `openai`, `openai-compatible`, and `gemini`
+* use the OpenAI chat integration for `openai` and `openai-compatible`; require a configured `LLM_BASE_URL` for `openai-compatible`
+* use the Google Gemini chat integration for `gemini`
+* allow local Ollama and other compatible services through `openai-compatible` during development
 * use LangGraph for tool-calling orchestration with trusted request context
+
+The local Ollama configuration is for development and testing only. Production deployments shall use a configured provider reachable from the deployed application; the Render deployment shall not depend on a developer workstation's local Ollama service.
 
 Embedding models shall:
 
-* support OpenAI-compatible embedding APIs
-* support local SentenceTransformer embedding models configured through `EMBEDDINGS_MODEL`
+* support provider values `openai`, `openai-compatible`, `gemini`, and `local`
+* use OpenAI embeddings for `openai` and `openai-compatible`; require `EMBEDDINGS_BASE_URL` for `openai-compatible`
+* use Google AI Studio embeddings with `gemini-embedding-001` for `gemini`; do not require an OpenAI-compatible base URL
+* use local SentenceTransformer models configured through `EMBEDDINGS_MODEL` for `local`, without requiring an API key
 
-The AI layer shall be configurable through environment variables so the chat model and embedding model can use the same provider or two compatible providers. The current implementation shall remain compatible with OpenAI-compatible chat endpoints, plus OpenAI-compatible or local embedding endpoints.
+The AI layer shall configure chat and embedding providers independently. Chat API-key resolution shall use `LLM_API_KEY` with `OPENAI_API_KEY` as a fallback. Embedding API-key resolution shall use `EMBEDDINGS_API_KEY`, then `LLM_API_KEY`, then `OPENAI_API_KEY`. The local Ollama configuration is for development/testing only; production deployments, including Render, shall use providers reachable from the deployed application and shall not depend on a developer workstation's local Ollama service.
 
 ## Template Engine
 
