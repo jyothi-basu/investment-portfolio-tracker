@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL,
+    username TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL
 );
@@ -47,9 +47,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id INTEGER NOT NULL,
     stock_symbol TEXT NOT NULL,
-    transaction_type TEXT NOT NULL,
-    quantity INTEGER NOT NULL,
-    price_per_share REAL NOT NULL,
+    transaction_type TEXT NOT NULL CHECK (transaction_type IN ('BUY', 'SELL')),
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    price_per_share REAL NOT NULL CHECK (price_per_share > 0),
     transaction_date TEXT NOT NULL,
     FOREIGN KEY (account_id) REFERENCES demat_accounts(account_id) ON DELETE CASCADE
 );
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS stock_prices (
     price_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     stock_symbol TEXT NOT NULL,
-    current_price REAL NOT NULL,
+    current_price REAL NOT NULL CHECK (current_price > 0),
     last_updated TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_id, stock_symbol),
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS chats (
     title TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (chat_id, user_id),
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
@@ -92,14 +93,15 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_id
 CREATE TABLE IF NOT EXISTS documents (
     document_id INTEGER PRIMARY KEY AUTOINCREMENT,
     chat_id INTEGER NOT NULL,
+    -- Transitional column retained until the raw db.py repository is migrated.
     user_id INTEGER NOT NULL,
     original_filename TEXT NOT NULL,
     uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
     processing_status TEXT NOT NULL CHECK (
         processing_status IN ('UPLOADED', 'PROCESSING', 'COMPLETED', 'REJECTED', 'FAILED')
     ),
-    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (chat_id, user_id) REFERENCES chats(chat_id, user_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_documents_user_id
