@@ -17,7 +17,12 @@
       <tr>
         <td>{{ item.stock_symbol }}</td>
         <td>{{ item.quantity }}</td>
-        <td>Rs. {{ "%.2f"|format(item.current_price) }}</td>
+        <td>
+          Rs. {{ "%.2f"|format(item.current_price) }}
+          {% if item.price_source == "average_buy_price" %}
+            <small class="text-muted d-block">Estimated at average buy price</small>
+          {% endif %}
+        </td>
         <td>Rs. {{ "%.2f"|format(item.current_value) }}</td>
       </tr>
       {% else %}

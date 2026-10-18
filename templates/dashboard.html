@@ -2,6 +2,12 @@
 {% block title %}Dashboard - Investment Portfolio Tracker{% endblock %}
 {% block content %}
 <h1 class="h3 mb-4">Dashboard</h1>
+{% if summary.estimated_price_symbols %}
+<div class="alert alert-info" role="status">
+  Current prices are not set for {{ summary.estimated_price_symbols|join(", ") }}.
+  Valuation uses the weighted average buy price until you update the price.
+</div>
+{% endif %}
 <div class="row g-3 mb-4">
   <div class="col-md-4">
     <div class="card stat-card">
@@ -53,7 +59,12 @@
       <tr>
         <td>{{ item.stock_symbol }}</td>
         <td>{{ item.quantity }}</td>
-        <td>Rs. {{ "%.2f"|format(item.current_price) }}</td>
+        <td>
+          Rs. {{ "%.2f"|format(item.current_price) }}
+          {% if item.price_source == "average_buy_price" %}
+            <small class="text-muted d-block">Estimated at average buy price</small>
+          {% endif %}
+        </td>
         <td>Rs. {{ "%.2f"|format(item.current_value) }}</td>
       </tr>
       {% else %}

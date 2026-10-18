@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 import json
-import sqlite3
 
 
 @dataclass(frozen=True)
@@ -14,13 +13,8 @@ class ToolExecutionResult:
 
 
 def normalize_for_json(value):
-    """Convert SQLite rows and nested containers to JSON-safe values."""
+    """Convert nested containers to JSON-safe values."""
 
-    if isinstance(value, sqlite3.Row):
-        return {
-            key: normalize_for_json(value[key])
-            for key in value.keys()
-        }
     if isinstance(value, dict):
         return {
             key: normalize_for_json(item)

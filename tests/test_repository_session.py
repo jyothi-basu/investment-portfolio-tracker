@@ -1,4 +1,4 @@
-"""Phase 3 tests for SQLAlchemy repository sessions and compatibility output."""
+"""Tests for SQLAlchemy repository sessions and service-facing output."""
 
 from __future__ import annotations
 
@@ -13,17 +13,17 @@ from app.repository import database
 from app.repository.models import Base, User
 from app.repository.serialization import model_to_dict, row_to_dict
 from app.repository.session import session_scope
+from tests.database_helpers import cleanup_test_database, configure_test_database
 
 
 @pytest.fixture
-def session_factory(tmp_path):
-    engine = database.create_database_engine(f"sqlite:///{tmp_path / 'session.db'}")
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False)
+def session_factory():
+    configure_test_database()
+    factory = sessionmaker(bind=database.get_engine(), expire_on_commit=False)
     try:
         yield factory
     finally:
-        engine.dispose()
+        cleanup_test_database()
 
 
 def test_session_scope_commits_successful_work(session_factory):
@@ -46,7 +46,7 @@ def test_session_scope_rolls_back_failed_work(session_factory):
         assert user is None
 
 
-def test_serializers_preserve_legacy_service_values():
+def test_serializers_preserve_service_values():
     timestamp = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
     row = {"amount": Decimal("12.3400"), "created_at": timestamp}
 

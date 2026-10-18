@@ -3,29 +3,27 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
-import uuid
 import pytest
 
 from fastapi.testclient import TestClient
 
+from app.repository import database
 from app.repository import db
 from app.security.jwt import TokenValidationError, decode_token, get_jwt_settings
 from app.services import auth_service, portfolio_service
 from main import create_fastapi_app
+from tests.database_helpers import cleanup_test_database, configure_test_database
 
 
 class TestJWTAuthentication:
     def setup_method(self):
-        self.original_db_path = db.DB_PATH
+        self.original_engine = database.engine
+        self.original_session_factory = database.SessionLocal
         self.original_environment = {
             name: os.environ.get(name)
             for name in ("SECRET_KEY", "JWT_SECRET_KEY", "JWT_COOKIE_SECURE")
         }
-        self.test_db_path = (
-            Path(__file__).resolve().parent / f".jwt-test-{uuid.uuid4().hex}.db"
-        )
-        db.DB_PATH = self.test_db_path
+        configure_test_database()
         os.environ["SECRET_KEY"] = (
             "test-only-session-key-with-at-least-32-characters"
         )
@@ -44,14 +42,15 @@ class TestJWTAuthentication:
         )
 
     def teardown_method(self):
-        db.DB_PATH = self.original_db_path
+        cleanup_test_database()
+        database.engine = self.original_engine
+        database.SessionLocal = self.original_session_factory
         for name, value in self.original_environment.items():
             if value is None:
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
         get_jwt_settings.cache_clear()
-        self.test_db_path.unlink(missing_ok=True)
 
     def _login_browser(self, client: TestClient):
         login_page = client.get("/login")

@@ -1,4 +1,4 @@
-"""Convert SQLAlchemy values into the legacy repository contract."""
+"""Convert SQLAlchemy values into service-facing business dictionaries."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sqlalchemy import inspect
 
 
 def serialize_value(value: Any) -> Any:
-    """Normalize ORM values for services that currently consume SQLite-style data."""
+    """Normalize ORM values for service-facing business dictionaries."""
 
     if isinstance(value, datetime):
         timestamp = value

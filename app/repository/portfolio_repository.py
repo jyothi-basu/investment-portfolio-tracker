@@ -228,15 +228,35 @@ def _holding_quantity_expression():
     )
 
 
+def _average_buy_price_expression():
+    buy_quantity = func.sum(
+        case(
+            (Transaction.transaction_type == "BUY", Transaction.quantity),
+            else_=literal(0),
+        )
+    )
+    buy_value = func.sum(
+        case(
+            (
+                Transaction.transaction_type == "BUY",
+                Transaction.quantity * Transaction.price_per_share,
+            ),
+            else_=literal(0),
+        )
+    )
+    return buy_value / func.nullif(buy_quantity, 0)
+
+
 def fetch_holding_rows_by_symbol(user_id: int) -> list[dict[str, Any]]:
     symbol = func.upper(Transaction.stock_symbol).label("stock_symbol")
     quantity = _holding_quantity_expression().label("quantity")
-    current_price = func.max(
-        func.coalesce(StockPrice.current_price, literal(0))
-    ).label("current_price")
+    current_price = func.max(StockPrice.current_price).label("current_price")
+    valuation_price = func.coalesce(
+        func.max(StockPrice.current_price), _average_buy_price_expression()
+    ).label("valuation_price")
     with session_scope() as session:
         rows = session.execute(
-            select(symbol, quantity, current_price)
+            select(symbol, quantity, current_price, valuation_price)
             .join(DematAccount, DematAccount.account_id == Transaction.account_id)
             .outerjoin(
                 StockPrice,
@@ -254,9 +274,10 @@ def fetch_holding_rows_by_symbol(user_id: int) -> list[dict[str, Any]]:
 def fetch_holding_rows_by_account(user_id: int) -> list[dict[str, Any]]:
     symbol = func.upper(Transaction.stock_symbol).label("stock_symbol")
     quantity = _holding_quantity_expression().label("quantity")
-    current_price = func.max(
-        func.coalesce(StockPrice.current_price, literal(0))
-    ).label("current_price")
+    current_price = func.max(StockPrice.current_price).label("current_price")
+    valuation_price = func.coalesce(
+        func.max(StockPrice.current_price), _average_buy_price_expression()
+    ).label("valuation_price")
     investment_value = func.sum(
         case(
             (
@@ -274,6 +295,7 @@ def fetch_holding_rows_by_account(user_id: int) -> list[dict[str, Any]]:
                 symbol,
                 quantity,
                 current_price,
+                valuation_price,
                 investment_value,
             )
             .join(DematAccount, DematAccount.account_id == Transaction.account_id)

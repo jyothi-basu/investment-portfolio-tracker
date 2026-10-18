@@ -1,3 +1,3 @@
-"""Repository package re-exporting the SQLite access layer used by services and routes."""
+"""Repository package exposing the SQLAlchemy database facade."""
 
 from .db import *

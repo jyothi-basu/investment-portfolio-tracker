@@ -1,4 +1,4 @@
-"""RAG loader and chunking tests without Chroma or SQLite."""
+"""RAG loader and chunking tests without Chroma or database access."""
 
 from pathlib import Path
 from unittest.mock import patch

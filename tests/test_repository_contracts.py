@@ -1,25 +1,30 @@
-"""Contract tests for the existing raw repository before ORM migration."""
+"""Contract tests for the SQLAlchemy repository facade."""
 
 from __future__ import annotations
 
 import pytest
 
+from app.repository import database
 from app.repository import db
+from tests.database_helpers import cleanup_test_database, configure_test_database
 
 
 @pytest.fixture
-def isolated_raw_repository(tmp_path, monkeypatch):
-    original_path = db.DB_PATH
-    db.DB_PATH = tmp_path / "contract.db"
+def isolated_repository():
+    original_engine = database.engine
+    original_session_factory = database.SessionLocal
+    configure_test_database()
     try:
         db.init_db()
         yield db
     finally:
-        db.DB_PATH = original_path
+        cleanup_test_database()
+        database.engine = original_engine
+        database.SessionLocal = original_session_factory
 
 
-def test_user_and_account_inserts_return_integer_ids(isolated_raw_repository):
-    repository = isolated_raw_repository
+def test_user_and_account_inserts_return_integer_ids(isolated_repository):
+    repository = isolated_repository
 
     user_id = repository.create_user("Contract User", "contract@example.com", "hash")
     account_id = repository.create_account(user_id, "Example Broker")
@@ -30,8 +35,8 @@ def test_user_and_account_inserts_return_integer_ids(isolated_raw_repository):
     assert repository.fetch_account(account_id, user_id)["broker_name"] == "Example Broker"
 
 
-def test_account_queries_are_user_scoped(isolated_raw_repository):
-    repository = isolated_raw_repository
+def test_account_queries_are_user_scoped(isolated_repository):
+    repository = isolated_repository
     first_user = repository.create_user("First", "first@example.com", "hash")
     second_user = repository.create_user("Second", "second@example.com", "hash")
     account_id = repository.create_account(first_user, "Private Broker")
@@ -40,8 +45,8 @@ def test_account_queries_are_user_scoped(isolated_raw_repository):
     assert repository.fetch_account(account_id, second_user) is None
 
 
-def test_refresh_token_rotation_is_atomic(isolated_raw_repository):
-    repository = isolated_raw_repository
+def test_refresh_token_rotation_is_atomic(isolated_repository):
+    repository = isolated_repository
     user_id = repository.create_user("Token User", "token@example.com", "hash")
     repository.create_refresh_token(user_id, "old-jti", "old-hash", "2099-01-01")
 

@@ -2,6 +2,12 @@
 {% block title %}Portfolio Summary - Investment Portfolio Tracker{% endblock %}
 {% block content %}
 <h1 class="h3 mb-4">Portfolio Summary</h1>
+{% if summary.estimated_price_symbols %}
+<div class="alert alert-info" role="status">
+  Current prices are not set for {{ summary.estimated_price_symbols|join(", ") }}.
+  Valuation uses the weighted average buy price until you update the price.
+</div>
+{% endif %}
 <div class="row g-3 mb-4">
   <div class="col-md-4">
     <div class="card"><div class="card-body"><strong>Total Investment</strong><div>Rs. {{ "%.2f"|format(summary.total_investment) }}</div></div></div>

@@ -28,18 +28,18 @@ from app.repository.chat_repository import (
     update_document_status,
 )
 from app.repository.models import Base
+from tests.database_helpers import cleanup_test_database, configure_test_database
 
 
 @pytest.fixture
-def chat_database(tmp_path):
+def chat_database():
     original_engine = database.engine
     original_factory = database.SessionLocal
-    database.configure_database(f"sqlite:///{tmp_path / 'chat.db'}")
-    Base.metadata.create_all(database.get_engine())
+    configure_test_database()
     try:
         yield
     finally:
-        database.get_engine().dispose()
+        cleanup_test_database()
         database.engine = original_engine
         database.SessionLocal = original_factory
 

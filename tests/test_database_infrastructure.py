@@ -7,6 +7,7 @@ from decimal import Decimal
 
 import pytest
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.repository import database
@@ -20,6 +21,21 @@ from app.repository.models import (
     Transaction,
     User,
 )
+from tests.database_helpers import (
+    cleanup_test_database,
+    configure_test_database,
+    get_test_database_url,
+)
+
+
+@pytest.fixture
+def test_engine():
+    configure_test_database()
+    engine = database.get_engine()
+    try:
+        yield engine
+    finally:
+        cleanup_test_database()
 
 
 def test_database_url_is_required_when_not_configured(monkeypatch):
@@ -29,17 +45,17 @@ def test_database_url_is_required_when_not_configured(monkeypatch):
         database.get_database_url()
 
 
-def test_explicit_sqlite_engine_enables_foreign_keys(tmp_path):
-    engine = database.create_database_engine(f"sqlite:///{tmp_path / 'orm.db'}")
+def test_explicit_sqlalchemy_engine_connects(test_engine):
+    engine = test_engine
     try:
         with engine.connect() as connection:
-            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+            assert connection.dialect.name == make_url(get_test_database_url()).get_backend_name()
     finally:
         engine.dispose()
 
 
-def test_orm_metadata_can_create_current_schema_on_explicit_test_database(tmp_path):
-    engine = database.create_database_engine(f"sqlite:///{tmp_path / 'orm.db'}")
+def test_orm_metadata_can_create_current_schema_on_explicit_test_database(test_engine):
+    engine = test_engine
     try:
         Base.metadata.create_all(engine)
         assert set(Base.metadata.tables) == {
@@ -75,8 +91,8 @@ def test_models_preserve_indexes_foreign_keys_and_money_precision():
     assert stock_price.scale == 4
 
 
-def test_relationships_and_user_cascade_work_on_explicit_sqlite_database(tmp_path):
-    engine = database.create_database_engine(f"sqlite:///{tmp_path / 'cascade.db'}")
+def test_relationships_and_user_cascade_work_on_postgresql(test_engine):
+    engine = test_engine
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -124,8 +140,8 @@ def test_relationships_and_user_cascade_work_on_explicit_sqlite_database(tmp_pat
         engine.dispose()
 
 
-def test_model_constraints_reject_duplicate_prices_and_invalid_values(tmp_path):
-    engine = database.create_database_engine(f"sqlite:///{tmp_path / 'constraints.db'}")
+def test_model_constraints_reject_duplicate_prices_and_invalid_values(test_engine):
+    engine = test_engine
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -155,8 +171,8 @@ def test_model_constraints_reject_duplicate_prices_and_invalid_values(tmp_path):
         engine.dispose()
 
 
-def test_domain_constraints_reject_invalid_transactions_and_duplicate_usernames(tmp_path):
-    engine = database.create_database_engine(f"sqlite:///{tmp_path / 'domain.db'}")
+def test_domain_constraints_reject_invalid_transactions_and_duplicate_usernames(test_engine):
+    engine = test_engine
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -217,8 +233,8 @@ def test_domain_constraints_reject_invalid_transactions_and_duplicate_usernames(
         engine.dispose()
 
 
-def test_document_ownership_is_derived_from_chat_owner(tmp_path):
-    engine = database.create_database_engine(f"sqlite:///{tmp_path / 'ownership.db'}")
+def test_document_ownership_is_derived_from_chat_owner(test_engine):
+    engine = test_engine
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -243,8 +259,8 @@ def test_document_ownership_is_derived_from_chat_owner(tmp_path):
         engine.dispose()
 
 
-def test_timestamps_are_utc_aware_and_chat_updates_refresh_updated_at(tmp_path):
-    engine = database.create_database_engine(f"sqlite:///{tmp_path / 'timestamps.db'}")
+def test_timestamps_are_utc_aware_and_chat_updates_refresh_updated_at(test_engine):
+    engine = test_engine
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
 

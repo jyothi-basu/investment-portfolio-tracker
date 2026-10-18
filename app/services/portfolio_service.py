@@ -1,4 +1,4 @@
-"""Portfolio business rules and calculations, sitting above the SQLite layer."""
+"""Portfolio business rules and calculations above the repository layer."""
 
 from bcrypt import checkpw, gensalt, hashpw
 
@@ -159,13 +159,15 @@ def calculate_holdings_by_symbol(user_id):
     holdings = []
     for row in rows:
         qty = int(row["quantity"])
-        current_price = float(row["current_price"] or 0)
+        has_current_price = row["current_price"] is not None
+        current_price = float(row["valuation_price"] or 0)
         holdings.append(
             {
                 "stock_symbol": row["stock_symbol"],
                 "quantity": qty,
                 "current_price": current_price,
                 "current_value": qty * current_price,
+                "price_source": "manual" if has_current_price else "average_buy_price",
             }
         )
     return holdings
@@ -187,7 +189,8 @@ def calculate_holdings_by_account(user_id):
             },
         )
         qty = int(row["quantity"])
-        current_price = float(row["current_price"] or 0)
+        has_current_price = row["current_price"] is not None
+        current_price = float(row["valuation_price"] or 0)
         investment_value = float(row["investment_value"] or 0)
         current_value = qty * current_price
         accounts[account_id]["symbols"].append(
@@ -196,6 +199,7 @@ def calculate_holdings_by_account(user_id):
                 "quantity": qty,
                 "current_price": current_price,
                 "current_value": current_value,
+                "price_source": "manual" if has_current_price else "average_buy_price",
             }
         )
         accounts[account_id]["investment_value"] += investment_value
@@ -208,10 +212,16 @@ def calculate_portfolio_summary(user_id):
     holdings = calculate_holdings_by_symbol(user_id)
     total_current_value = sum(item["current_value"] for item in holdings)
     total_investment = float(total_investment_row["total_investment"] or 0)
+    estimated_price_symbols = [
+        item["stock_symbol"]
+        for item in holdings
+        if item["price_source"] == "average_buy_price"
+    ]
     return {
         "total_investment": total_investment,
         "current_portfolio_value": total_current_value,
         "profit_loss": total_current_value - total_investment,
         "total_stocks_held": len(holdings),
         "total_demat_accounts": db.fetch_account_count(user_id),
+        "estimated_price_symbols": estimated_price_symbols,
     }

@@ -5,9 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import asyncio
 import os
-from pathlib import Path
 import socket
-import sqlite3
 import threading
 import time
 import uuid
@@ -20,8 +18,12 @@ from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
 import httpx
 import uvicorn
+from sqlalchemy import update
 
+from app.repository import database
 from app.repository import db
+from app.repository.models import PersonalAccessToken
+from app.repository.session import session_scope
 from app.security.jwt import get_jwt_settings
 from app.security.personal_access_tokens import (
     PersonalAccessTokenError,
@@ -31,17 +33,18 @@ from app.security.personal_access_tokens import (
 from app.services import auth_service, portfolio_service
 from app.services.chat_title_service import generate_title_if_needed, is_greeting_only
 from main import create_fastapi_app
+from tests.database_helpers import cleanup_test_database, configure_test_database
 
 
 class TestMCPAuthentication:
     def setup_method(self):
-        self.original_db_path = db.DB_PATH
+        self.original_engine = database.engine
+        self.original_session_factory = database.SessionLocal
         self.original_environment = {
             name: os.environ.get(name)
             for name in ("SECRET_KEY", "JWT_SECRET_KEY", "JWT_COOKIE_SECURE")
         }
-        self.test_db_path = Path(__file__).resolve().parent / f".mcp-test-{uuid.uuid4().hex}.db"
-        db.DB_PATH = self.test_db_path
+        configure_test_database()
         os.environ["SECRET_KEY"] = "test-only-session-key-with-at-least-32-characters"
         os.environ["JWT_SECRET_KEY"] = "test-only-secret-key-with-at-least-32-characters"
         os.environ["JWT_COOKIE_SECURE"] = "false"
@@ -53,14 +56,15 @@ class TestMCPAuthentication:
         self.user_two = portfolio_service.authenticate_user("two@example.com", "password123")
 
     def teardown_method(self):
-        db.DB_PATH = self.original_db_path
+        cleanup_test_database()
+        database.engine = self.original_engine
+        database.SessionLocal = self.original_session_factory
         for name, value in self.original_environment.items():
             if value is None:
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
         get_jwt_settings.cache_clear()
-        self.test_db_path.unlink(missing_ok=True)
 
     def _jwt_headers(self, user_id):
         pair = auth_service.issue_token_pair(user_id)
@@ -107,10 +111,12 @@ class TestMCPAuthentication:
         expired = create_personal_access_token(
             self.user_one["user_id"], "Expiring", expiry
         )
-        db.execute(
-            "UPDATE personal_access_tokens SET expires_at = ? WHERE token_id = ?",
-            ((datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(), expired.token_id),
-        )
+        with session_scope() as session:
+            session.execute(
+                update(PersonalAccessToken)
+                .where(PersonalAccessToken.token_id == expired.token_id)
+                .values(expires_at=datetime.now(timezone.utc) - timedelta(minutes=1))
+            )
         with pytest.raises(PersonalAccessTokenError):
             authenticate_personal_access_token(expired.token)
 
@@ -415,38 +421,19 @@ class TestMCPAuthentication:
         assert model.invoke.call_count == 1
 
 
-class TestConversationMigration:
-    def test_existing_chat_receives_public_uuid(self):
-        original_db_path = db.DB_PATH
-        test_db_path = Path(__file__).resolve().parent / f".migration-{uuid.uuid4().hex}.db"
+class TestConversationRepository:
+    def test_new_chat_receives_public_uuid(self):
+        original_engine = database.engine
+        original_session_factory = database.SessionLocal
         try:
-            db.DB_PATH = test_db_path
-            connection = sqlite3.connect(test_db_path)
-            connection.executescript(
-                """
-                CREATE TABLE users (
-                    user_id INTEGER PRIMARY KEY,
-                    username TEXT NOT NULL,
-                    email TEXT NOT NULL UNIQUE,
-                    password_hash TEXT NOT NULL
-                );
-                CREATE TABLE chats (
-                    chat_id INTEGER PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    title TEXT,
-                    created_at TEXT,
-                    updated_at TEXT
-                );
-                INSERT INTO users VALUES (1, 'Existing', 'existing@example.com', 'hash');
-                INSERT INTO chats VALUES (1, 1, 'Existing chat', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-                """
-            )
-            connection.close()
-
+            configure_test_database()
             db.init_db()
-            migrated = db.fetch_chat(1, 1)
+            user_id = db.create_user("Conversation User", "conversation@example.com", "hash")
+            chat_id = db.create_chat(user_id, "New conversation")
+            chat = db.fetch_chat(chat_id, user_id)
 
-            assert str(uuid.UUID(migrated["conversation_id"])) == migrated["conversation_id"]
+            assert str(uuid.UUID(chat["conversation_id"])) == chat["conversation_id"]
         finally:
-            db.DB_PATH = original_db_path
-            test_db_path.unlink(missing_ok=True)
+            cleanup_test_database()
+            database.engine = original_engine
+            database.SessionLocal = original_session_factory

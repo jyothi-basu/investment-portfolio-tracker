@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
+from app.ai.context import get_assistant_context, push_assistant_context
 import app.ai.langgraph.nodes as nodes
 from app.ai.langgraph.edges import route_after_agent, route_after_tool_executor
 from app.ai.langgraph.graph import build_portfolio_graph
@@ -75,6 +76,30 @@ class TestLangGraphArchitecture:
 
         assert [message.tool_call_id for message in result["messages"]] == ["first", "second"]
         assert [message.content for message in result["messages"]] == ["get_holdings", "get_transactions"]
+
+    def test_parallel_tools_receive_trusted_assistant_context(self):
+        def execute(name, args):
+            context = get_assistant_context()
+            return ToolExecutionResult(
+                content=f"{context.user_id}:{context.chat_id}",
+                citations=[],
+            )
+
+        with push_assistant_context(user_id=42, chat_id=99), patch.object(
+            nodes, "execute_tool_call", side_effect=execute
+        ):
+            result = nodes.tool_executor_node(
+                {
+                    "tool_calls": [
+                        {"name": "get_holdings", "args": {}, "id": "first"},
+                        {"name": "search_uploaded_documents", "args": {}, "id": "second"},
+                    ],
+                    "tool_results": [],
+                    "tool_rounds": 0,
+                }
+            )
+
+        assert [message.content for message in result["messages"]] == ["42:99", "42:99"]
 
     def test_unknown_tool_isolated_as_structured_tool_message(self):
         with patch.object(nodes, "execute_tool_call") as execute:

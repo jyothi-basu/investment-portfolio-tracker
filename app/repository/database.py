@@ -1,8 +1,6 @@
 """SQLAlchemy engine and session configuration.
 
-This module is the infrastructure layer for the ORM migration. The existing
-repository facade in ``db.py`` remains in place until its functions are
-migrated incrementally.
+This module is the SQLAlchemy database infrastructure layer.
 """
 
 from __future__ import annotations
@@ -11,7 +9,7 @@ import os
 from typing import Generator
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -35,18 +33,7 @@ def create_database_engine(database_url: str | None = None) -> Engine:
     """Create a synchronous SQLAlchemy engine for the configured database."""
 
     url = database_url or get_database_url()
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    engine = create_engine(url, connect_args=connect_args, future=True)
-
-    if url.startswith("sqlite"):
-
-        @event.listens_for(engine, "connect")
-        def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
-            cursor = dbapi_connection.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
-
-    return engine
+    return create_engine(url, future=True, pool_pre_ping=True)
 
 
 engine: Engine | None = None
@@ -82,7 +69,7 @@ def get_session() -> Generator[Session, None, None]:
 
 
 def configure_database(database_url: str) -> None:
-    """Replace the engine and session factory, primarily for tests and migration work."""
+    """Replace the configured engine and session factory."""
 
     global engine, SessionLocal
     if engine is not None:

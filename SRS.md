@@ -34,7 +34,7 @@ The project demonstrates the practical use of:
 * Retrieval-Augmented Generation
 * provider-aware chat and embedding clients, including Gemini, OpenAI-compatible, and local SentenceTransformer embeddings
 
-The application is built using Python, FastAPI, SQLite, Bootstrap, HTML, CSS, and JavaScript.
+The application is built using Python, FastAPI, SQLAlchemy, a configurable relational database, Bootstrap, HTML, CSS, and JavaScript. PostgreSQL is the default project deployment choice.
 
 ---
 
@@ -131,10 +131,10 @@ The application shall continue to use a layered architecture.
 * `main.py` starts the FastAPI application.
 * `app/routes/*.py` handles HTTP requests, form submission, redirects, and flash messages.
 * `app/services/` contains business rules and portfolio calculations.
-* `app/repository/` contains SQLite database operations.
+* `app/repository/` contains SQLAlchemy engine configuration, ORM models, and domain repositories.
 * `app/ai/` contains LangGraph orchestration, the shared read-only tool registry, trusted request context, prompts, and RAG helpers.
 * `app/mcp/` contains shared MCP tools, STDIO, Streamable HTTP and legacy SSE transports, and ephemeral session management.
-* `schema.sql` contains the database schema definition.
+* SQLAlchemy ORM models define the current database schema. Alembic will manage schema evolution.
 * `mcp_server.py` starts the standalone STDIO transport.
 
 The AI functionality shall be added without unnecessarily duplicating existing business logic.
@@ -162,10 +162,10 @@ The high-level architecture shall be:
                |                          |
                +--------------------------+
                                        |
-                                     SQLite
+                              Relational Database
 ```
 
-The AI assistant shall not directly access SQLite.
+The AI assistant shall not directly access the relational database.
 
 The AI assistant shall obtain portfolio information through controlled application functions or services.
 
@@ -221,9 +221,11 @@ The remote MCP flow shall be:
 
 ## Relational Database
 
-* SQLite
+* A configurable relational database through SQLAlchemy
 
-SQLite shall store structured application data such as:
+PostgreSQL is the database currently used by the project. The repository layer shall remain database-aware but not database-bound: a compatible SQLAlchemy URL shall allow a deployment to select another relational database, such as MySQL or SQLite, with minimal application changes. Database-driver-specific behavior shall remain inside the database infrastructure layer.
+
+The relational database shall store structured application data such as:
 
 * Users
 * Refresh-token hashes and revocation state
@@ -266,7 +268,7 @@ The project shall use `pytest` as its automated test framework. The test suite s
 * RAG loading and chunking behavior
 * FastAPI document-upload and ingestion boundaries
 
-Tests shall remain focused on application behavior and architecture contracts rather than depending unnecessarily on the current SQLite implementation, so they remain useful during future database-layer migrations.
+Tests shall remain focused on application behavior and architecture contracts rather than depending unnecessarily on a particular database implementation, so they remain useful during future database-layer migrations.
 
 ## AI Provider Architecture
 
@@ -633,7 +635,7 @@ AI tools shall:
 * Not modify portfolio data.
 * Not delete data.
 * Not bypass application authorization.
-* Return plain JSON-serializable business objects rather than SQLite row objects.
+* Return plain JSON-serializable business objects rather than backend-specific row objects.
 * Return transaction records with business-facing fields including symbol, transaction type, quantity, price, transaction date, and demat account where available.
 * Return demat account records with human-readable account or broker names.
 
@@ -798,7 +800,7 @@ Metadata shall include, where appropriate:
 
 The original uploaded document shall not be stored permanently.
 
-Chroma shall not replace SQLite as the relational database for application data.
+Chroma shall not replace the relational database as the system of record for application data.
 
 ---
 
@@ -807,7 +809,7 @@ Chroma shall not replace SQLite as the relational database for application data.
 When a user deletes a document from a chat:
 
 1. The document's associated vectors/chunks shall be deleted from Chroma.
-2. The document's metadata shall be deleted from SQLite.
+2. The document's metadata shall be deleted from the relational database.
 
 No orphaned vectors belonging to the deleted document should remain available for retrieval.
 
@@ -817,10 +819,10 @@ No orphaned vectors belonging to the deleted document should remain available fo
 
 When a user deletes a chat:
 
-1. All messages belonging to the chat shall be deleted from SQLite.
-2. All document metadata belonging to the chat shall be deleted from SQLite.
+1. All messages belonging to the chat shall be deleted from the relational database.
+2. All document metadata belonging to the chat shall be deleted from the relational database.
 3. All Chroma chunks and embeddings belonging to the chat shall be deleted.
-4. The chat record shall be deleted from SQLite.
+4. The chat record shall be deleted from the relational database.
 
 After deletion, the assistant shall not be able to retrieve information from the deleted chat or its documents.
 
@@ -1184,8 +1186,8 @@ for each demat account.
 22. Documents classified as irrelevant shall not be added to Chroma.
 23. Original uploaded files shall be deleted after successful RAG ingestion.
 24. Failed document processing shall not result in premature deletion of the temporary file.
-25. Deleting a document shall remove its metadata from SQLite and its vectors/chunks from Chroma.
-26. Deleting a chat shall remove its messages and metadata from SQLite and all associated vectors/chunks from Chroma.
+25. Deleting a document shall remove its metadata from the relational database and its vectors/chunks from Chroma.
+26. Deleting a chat shall remove its messages and metadata from the relational database and all associated vectors/chunks from Chroma.
 27. The assistant shall use relevant context rather than automatically including all available context.
 28. RAG responses shall use retrieved document context when the question requires information from uploaded documents.
 29. The assistant shall not invent unavailable numerical risk information.
@@ -1464,6 +1466,13 @@ investment_portfolio_tracker/
 │   │   └── stdio.py
 │   ├── repository/
 │   │   ├── __init__.py
+│   │   ├── auth_repository.py
+│   │   ├── chat_repository.py
+│   │   ├── database.py
+│   │   ├── models.py
+│   │   ├── portfolio_repository.py
+│   │   ├── serialization.py
+│   │   ├── session.py
 │   │   └── db.py
 │   ├── security/
 │   │   ├── __init__.py
@@ -1476,12 +1485,10 @@ investment_portfolio_tracker/
 │       ├── chat_title_service.py
 │       ├── document_service.py
 │       └── portfolio_service.py
-├── schema.sql
 ├── requirements.txt
 ├── pytest.ini
 ├── README.md
 ├── SRS.md
-├── portfolio.db
 ├── main.py
 ├── static/
 │   ├── style.css
@@ -1539,7 +1546,7 @@ The project shall be considered complete when:
 * The assistant can retrieve relevant portfolio information through controlled AI tools.
 * The assistant can retrieve portfolio summaries, holdings, transactions, stored stock prices, and demat accounts through shared read-only tools.
 * Shared AI and MCP business tools use one registry and expose consistent tool names.
-* Transaction and demat-account tool results are JSON-serializable business objects rather than SQLite row representations.
+* Transaction and demat-account tool results are JSON-serializable business objects rather than backend-specific row representations.
 * Existing portfolio business logic is reused where appropriate.
 * The assistant can answer application-related questions using application knowledge.
 * The assistant can answer portfolio-related questions.
@@ -1549,7 +1556,7 @@ The project shall be considered complete when:
 * The assistant can understand relevant follow-up questions using conversation history.
 * The assistant does not retrieve another user's portfolio or documents.
 * Deleting a document removes its associated Chroma data.
-* Deleting a chat removes its messages and metadata from SQLite and its associated vectors/chunks from Chroma.
+* Deleting a chat removes its messages and metadata from the relational database and its associated vectors/chunks from Chroma.
 * The assistant does not answer unrelated questions merely because an unrelated document was uploaded.
 * The assistant does not invent unavailable numerical risk information.
 * The assistant does not provide financial advice or investment recommendations.
@@ -1561,7 +1568,7 @@ The project shall be considered complete when:
 * Users can view holdings.
 * Users can view demat account-wise summaries.
 * Users can view portfolio summaries.
-* All structured application data is stored in SQLite.
+* All structured application data is stored in the configured relational database.
 * Chroma stores processed document information required for semantic retrieval.
 * Foreign key relationships are enforced.
 * The application is accessible and usable with NVDA.

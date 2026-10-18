@@ -21,26 +21,23 @@ from app.repository.auth_repository import (
     rotate_refresh_token,
     touch_personal_access_token,
 )
-from app.repository.models import Base
+from tests.database_helpers import cleanup_test_database, configure_test_database
 
 
 @pytest.fixture
-def auth_database(tmp_path):
+def auth_database():
     original_engine = database.engine
     original_factory = database.SessionLocal
-    engine = database.create_database_engine(f"sqlite:///{tmp_path / 'auth.db'}")
-    database.configure_database(f"sqlite:///{tmp_path / 'auth.db'}")
-    Base.metadata.create_all(database.get_engine())
+    configure_test_database()
     try:
         yield
     finally:
-        database.get_engine().dispose()
+        cleanup_test_database()
         database.engine = original_engine
         database.SessionLocal = original_factory
-        engine.dispose()
 
 
-def test_user_repository_returns_legacy_dictionary_contract(auth_database):
+def test_user_repository_returns_dictionary_contract(auth_database):
     user_id = create_user("Auth User", "auth@example.com", "hash")
 
     assert email_exists("auth@example.com") is True

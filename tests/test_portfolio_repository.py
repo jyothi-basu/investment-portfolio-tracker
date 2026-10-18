@@ -7,6 +7,7 @@ import pytest
 from app.repository import database
 from app.repository.auth_repository import create_user
 from app.repository.models import Base
+from tests.database_helpers import cleanup_test_database, configure_test_database
 from app.repository.portfolio_repository import (
     create_account,
     create_transaction,
@@ -28,15 +29,14 @@ from app.repository.portfolio_repository import (
 
 
 @pytest.fixture
-def portfolio_database(tmp_path):
+def portfolio_database():
     original_engine = database.engine
     original_factory = database.SessionLocal
-    database.configure_database(f"sqlite:///{tmp_path / 'portfolio.db'}")
-    Base.metadata.create_all(database.get_engine())
+    configure_test_database()
     try:
         yield
     finally:
-        database.get_engine().dispose()
+        cleanup_test_database()
         database.engine = original_engine
         database.SessionLocal = original_factory
 
@@ -80,11 +80,36 @@ def test_portfolio_aggregates_match_existing_business_rules(portfolio_database):
     assert fetch_account_stock_quantity(account_id, "ABC") == 8
     assert fetch_prices(user_id)[0]["stock_symbol"] == "ABC"
     assert fetch_holding_rows_by_symbol(user_id) == [
-        {"stock_symbol": "ABC", "quantity": 8, "current_price": 11.0},
-        {"stock_symbol": "XYZ", "quantity": 5, "current_price": 25.0},
+        {
+            "stock_symbol": "ABC",
+            "quantity": 8,
+            "current_price": 11.0,
+            "valuation_price": 11.0,
+        },
+        {
+            "stock_symbol": "XYZ",
+            "quantity": 5,
+            "current_price": 25.0,
+            "valuation_price": 25.0,
+        },
     ]
     assert fetch_total_investment_row(user_id)["total_investment"] == 176.0
     account_summary = fetch_holding_rows_by_account(user_id)
     assert account_summary[0]["investment_value"] == 76.0
     assert account_summary[1]["investment_value"] == 100.0
     assert fetch_account_count(user_id) == 1
+
+
+def test_missing_current_price_uses_weighted_average_buy_price(portfolio_database):
+    user_id = create_user("Fallback User", "fallback@example.com", "hash")
+    account_id = create_account(user_id, "Broker")
+    create_transaction(account_id, "ABC", "BUY", 10, 50, "2026-01-01")
+
+    assert fetch_holding_rows_by_symbol(user_id) == [
+        {
+            "stock_symbol": "ABC",
+            "quantity": 10,
+            "current_price": None,
+            "valuation_price": 50.0,
+        }
+    ]

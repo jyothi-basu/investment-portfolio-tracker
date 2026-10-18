@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 import json
 import logging
-import sqlite3
 from typing import Any
 
 from langchain_core.messages import HumanMessage, ToolMessage
+from sqlalchemy.exc import OperationalError
 
 from app.ai.provider_factory import build_chat_model, get_chat_provider_settings
 from app.ai.prompts import format_citations
@@ -82,7 +83,7 @@ def agent_node(state: PortfolioAssistantState) -> dict[str, Any]:
 
 
 def _is_transient_failure(exc: Exception) -> bool:
-    if isinstance(exc, (TimeoutError, ConnectionError, OSError, sqlite3.OperationalError)):
+    if isinstance(exc, (TimeoutError, ConnectionError, OSError, OperationalError)):
         return True
     return exc.__class__.__name__ in {"TimeoutException", "ConnectError", "ReadError", "TemporaryFailure"}
 
@@ -108,7 +109,7 @@ def _execute_tool(tool_call: dict[str, Any], retryable: bool) -> dict[str, Any]:
     return {"tool_call_id": tool_id, "name": tool_name, "status": "error", "content": json.dumps({"error": f"Tool execution failed: {last_error}"}), "citations": []}
 
 
-async def _execute_tool_calls(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _execute_tool_calls(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
     specs = []
     for call in tool_calls:
         try:
@@ -128,11 +129,26 @@ async def _execute_tool_calls(tool_calls: list[dict[str, Any]]) -> list[dict[str
             end = index
             while end < len(tool_calls) and not isinstance(specs[end], Exception) and specs[end].parallel_safe:
                 end += 1
-            batch = await asyncio.gather(*[asyncio.to_thread(_execute_tool, tool_calls[pos], specs[pos].retryable) for pos in range(index, end)])
-            results.extend(batch)
+            work = [
+                (
+                    tool_calls[pos],
+                    specs[pos].retryable,
+                    copy_context(),
+                )
+                for pos in range(index, end)
+            ]
+
+            def execute_in_context(item):
+                tool_call, retryable, context = item
+                return context.run(_execute_tool, tool_call, retryable)
+
+            with ThreadPoolExecutor(max_workers=end - index) as executor:
+                results.extend(
+                    executor.map(execute_in_context, work)
+                )
             index = end
         else:
-            results.append(await asyncio.to_thread(_execute_tool, tool_calls[index], spec.retryable))
+            results.append(_execute_tool(tool_calls[index], spec.retryable))
             index += 1
     return results
 
@@ -146,7 +162,7 @@ def tool_executor_node(state: PortfolioAssistantState) -> dict[str, Any]:
     """
 
     tool_calls = state.get("tool_calls") or []
-    results = asyncio.run(_execute_tool_calls(tool_calls))
+    results = _execute_tool_calls(tool_calls)
     return {
         "messages": [ToolMessage(content=result["content"], tool_call_id=result["tool_call_id"]) for result in results],
         "tool_results": [*(state.get("tool_results") or []), *results],
@@ -168,7 +184,7 @@ def persistence_node(state: PortfolioAssistantState) -> dict[str, Any]:
     """Persist only user/assistant messages and the chat timestamp.
 
     ToolMessages, tool calls, tool results, and execution metadata are never
-    written to SQLite.
+    written to the configured relational database.
     """
 
     metadata = state.get("metadata") or {}

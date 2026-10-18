@@ -54,7 +54,7 @@ This project goes beyond CRUD:
 - layered FastAPI backend design
 - exact portfolio calculations in a service layer
 - authenticated, user-scoped data access
-- rotated refresh tokens stored as hashes in SQLite
+- rotated refresh tokens stored as hashes in the configured relational database
 - CSRF-protected server-rendered forms
 - document ingestion with PDF page-level metadata
 - vector search with Chroma
@@ -74,7 +74,7 @@ This project started as a Flask-based portfolio tracker during the early stages 
 ## Tech Highlights
 
 - FastAPI routers separated from business rules and repository code
-- SQLite-backed relational storage for users, chats, transactions, and documents
+- SQLAlchemy-backed relational storage for users, chats, transactions, and documents
 - Chroma-backed vector store for uploaded-document retrieval
 - OpenAI-compatible and Gemini tool-calling assistant support through LangGraph and LangChain provider integrations
 - Trusted request context for user and chat ownership
@@ -148,7 +148,7 @@ Example:
 
 - Python 3
 - FastAPI
-- SQLite
+- PostgreSQL
 - Jinja2
 - Bootstrap 5
 - Vanilla JavaScript
@@ -214,6 +214,13 @@ investment_portfolio_tracker/
 │   │   └── stdio.py
 │   ├── repository/
 │   │   ├── __init__.py
+│   │   ├── auth_repository.py
+│   │   ├── chat_repository.py
+│   │   ├── database.py
+│   │   ├── models.py
+│   │   ├── portfolio_repository.py
+│   │   ├── serialization.py
+│   │   ├── session.py
 │   │   └── db.py
 │   ├── security/
 │   │   ├── __init__.py
@@ -226,12 +233,10 @@ investment_portfolio_tracker/
 │       ├── chat_title_service.py
 │       ├── document_service.py
 │       └── portfolio_service.py
-├── schema.sql
 ├── requirements.txt
 ├── pytest.ini
 ├── README.md
 ├── SRS.md
-├── portfolio.db
 ├── mcp_server.py
 ├── mcp.config.example.json
 ├── main.py
@@ -293,6 +298,42 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 pip install -r requirements.txt
 ```
 
+### Database Configuration
+
+The repository uses SQLAlchemy ORM and reads the database connection from `DATABASE_URL`. PostgreSQL is the database currently used by this project, but the repository is not coupled to PostgreSQL. Services, routes, AI tools, and MCP tools do not import a database driver or execute SQL directly.
+
+Create the database before starting the application. SQLAlchemy creates the mapped tables during startup in this commit.
+
+PostgreSQL, the current project setup:
+
+```env
+DATABASE_URL=postgresql+psycopg://portfolio_user:password@localhost:5432/portfolio_tracker
+```
+
+MySQL, after installing a MySQL SQLAlchemy driver such as `PyMySQL`:
+
+```bash
+pip install pymysql
+```
+
+```env
+DATABASE_URL=mysql+pymysql://portfolio_user:password@localhost:3306/portfolio_tracker
+```
+
+SQLite, for a local single-file setup:
+
+```env
+DATABASE_URL=sqlite:///./portfolio_tracker.db
+```
+
+Changing the URL is normally the only application configuration change. If a future feature requires database-specific SQL, keep that code inside the database/repository boundary rather than changing services or routes. Alembic migrations will be added in a later change; until then, do not use this startup table creation approach for production schema evolution.
+
+For automated tests, create a separate database and set `TEST_DATABASE_URL`. Tests drop and recreate ORM tables, so never point it at the application database:
+
+```env
+TEST_DATABASE_URL=postgresql+psycopg://portfolio_user:password@localhost:5432/portfolio_tracker_test
+```
+
 5. Run the application:
 
 ```bash
@@ -307,13 +348,13 @@ http://127.0.0.1:8000
 
 ### Run the tests
 
-The automated suite uses `pytest` and currently contains 40 tests covering authentication, MCP security, LangGraph orchestration, shared AI tools, embedding-provider selection, RAG boundaries, and document-upload behavior:
+The automated suite uses `pytest` and covers authentication, repository contracts, database constraints, MCP security, LangGraph orchestration, shared AI tools, embedding-provider selection, RAG boundaries, and document-upload behavior. Set `TEST_DATABASE_URL` before running the complete suite:
 
 ```bash
 python -m pytest -q
 ```
 
-The suite intentionally emphasizes framework and architecture behavior rather than coupling every test to the current SQLite implementation, which keeps the tests useful during the planned database-layer migration.
+The suite intentionally emphasizes framework and architecture behavior rather than coupling every test to a particular database backend.
 
 ### MCP Transports
 
@@ -407,7 +448,7 @@ Remote MCP requests use `Authorization: Bearer ipt_pat_...`. Create, inspect, an
 - `GET /api/v1/personal-access-tokens`
 - `DELETE /api/v1/personal-access-tokens/{token_id}`
 
-Browser users can manage the same credentials from `API Tokens` in the authenticated navigation, served at `/settings/personal-access-tokens`. The create response displays the raw PAT once. SQLite stores only its Argon2 hash; expiry, last use, and revocation are tracked separately. Configure the client to send the same PAT header on both SSE and message requests. Production deployments must use HTTPS and should set `MCP_ALLOWED_HOSTS` and `MCP_ALLOWED_ORIGINS` to their exact public values.
+Browser users can manage the same credentials from `API Tokens` in the authenticated navigation, served at `/settings/personal-access-tokens`. The create response displays the raw PAT once. The configured relational database stores only its Argon2 hash; expiry, last use, and revocation are tracked separately. Configure the client to send the same PAT header on both SSE and message requests. Production deployments must use HTTPS and should set `MCP_ALLOWED_HOSTS` and `MCP_ALLOWED_ORIGINS` to their exact public values.
 
 HTTP MCP sessions are intentionally stored in memory. Run this transport with one application worker; a multi-worker deployment would require a shared session store or sticky routing.
 
@@ -420,11 +461,10 @@ The project is organized in layers:
 - `main.py` starts the FastAPI application
 - `app/routes/*.py` handles HTTP requests, form handling, and redirects
 - `app/services/` handles business rules
-- `app/repository/` handles SQLite operations
+- `app/repository/` contains the SQLAlchemy engine, ORM models, domain repositories, and database facade
 - `app/security/` validates JWTs and creates, verifies, and revokes MCP PATs
 - `app/ai/` contains the LangGraph orchestrator, provider factory, trusted assistant context, shared read-only tool registry, and RAG helpers
 - `app/mcp/` shares MCP tools across STDIO and authenticated HTTP transports
-- `schema.sql` defines the database schema
 
 ### AI Provider Architecture
 
@@ -487,7 +527,7 @@ The shared business tool registry currently provides:
 - `search_uploaded_documents`
 - `get_application_help`
 
-Portfolio services continue to receive explicit `user_id` arguments. AI wrappers obtain identity from trusted assistant context, while MCP adapters obtain identity from authenticated MCP session state. The model never supplies `user_id`, `chat_id`, or `conversation_id`. SQLite rows are normalized into plain business dictionaries before they are serialized for tool consumers.
+Portfolio services continue to receive explicit `user_id` arguments. AI wrappers obtain identity from trusted assistant context, while MCP adapters obtain identity from authenticated MCP session state. The model never supplies `user_id`, `chat_id`, or `conversation_id`. SQLAlchemy results are normalized into plain business dictionaries before they are serialized for tool consumers.
 
 All MCP transports follow the same retrieval path. Local STDIO resolves `MCP_CONVERSATION_ID` at startup. Streamable HTTP and legacy SSE resolve the authenticated user from a PAT and store the selected public conversation UUID in an in-memory session; ownership is checked before the UUID is mapped to the internal chat ID.
 
@@ -553,11 +593,11 @@ The codebase is intentionally split into clear layers so it is easier to debug, 
 - request handling stays in `app/routes/`
 - business decisions stay in `app/services/`
 - database access stays in `app/repository/`
-- the schema stays in `schema.sql`
+- the schema is defined by SQLAlchemy ORM models; Alembic will manage schema evolution
 
 ### Database
 
-The app uses SQLite and creates a local database file named `portfolio.db`.
+The app uses SQLAlchemy and reads its database connection from `DATABASE_URL`. PostgreSQL is the default project deployment choice, while compatible SQLAlchemy URLs can be used for other relational databases.
 
 The main tables are:
 
@@ -568,6 +608,8 @@ The main tables are:
 - `chats`
 - `chat_messages`
 - `documents`
+
+The application creates the mapped tables during startup for now. Alembic will replace startup schema creation once the migration baseline is added.
 
 Uploaded document chunks are stored in Chroma with user/chat ownership metadata and page numbers for PDF documents.
 
@@ -604,7 +646,7 @@ This project is a solid example of Python backend work because it demonstrates:
 
 ### Authentication
 
-User passwords are hashed with bcrypt. Successful login issues a short-lived JWT access token and a rotating refresh token in HttpOnly cookies. Refresh-token hashes are stored in SQLite for rotation and logout revocation, while protected routes also accept access tokens through the standard Bearer authorization header. Server sessions are retained only for flash messages, CSRF state, and the last selected chat; they are not an authentication source.
+User passwords are hashed with bcrypt. Successful login issues a short-lived JWT access token and a rotating refresh token in HttpOnly cookies. Refresh-token hashes are stored in the configured relational database for rotation and logout revocation, while protected routes also accept access tokens through the standard Bearer authorization header. Server sessions are retained only for flash messages, CSRF state, and the last selected chat; they are not an authentication source.
 
 MCP HTTP authentication is intentionally separate from browser JWT authentication. MCP clients use revocable personal access tokens with an `ipt_pat_` prefix. Raw PATs are shown only at creation, only Argon2 hashes are persisted, and expired or revoked tokens are rejected. Transport session state is process-local and is removed when the client terminates or disconnects.
 

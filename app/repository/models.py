@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models matching the current SQLite schema."""
+"""SQLAlchemy ORM models for the application relational schema."""
 
 from __future__ import annotations
 
