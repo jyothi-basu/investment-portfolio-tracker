@@ -1,4 +1,4 @@
-"""Embedding factory used by the Chroma vector-store layer."""
+"""Embedding factory used by the configurable vector-store layer."""
 
 from app.ai.provider_factory import build_embeddings_model
 

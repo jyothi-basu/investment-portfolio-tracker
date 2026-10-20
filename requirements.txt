@@ -1,6 +1,7 @@
 bcrypt==4.2.0
 argon2-cffi==25.1.0
 chromadb==1.5.9
+pinecone==9.1.0
 fastapi==0.141.1
 httpx==0.28.1
 mcp[cli]>=1.28,<2.0.0

@@ -1,10 +1,16 @@
 """Request-level orchestration for the production LangGraph assistant."""
 
+import logging
+
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.ai.context import push_assistant_context
 from app.ai.langgraph import build_portfolio_graph
 from app.ai.prompts import PROJECT_ASSISTANT_SYSTEM_PROMPT
+from app.ai.provider_errors import AIProviderError
+
+
+logger = logging.getLogger(__name__)
 
 
 class ChatServiceError(RuntimeError):
@@ -60,7 +66,19 @@ def generate_chat_response(user_message, user_id, chat_id, history=None):
             )
     except ChatServiceError:
         raise
+    except AIProviderError as exc:
+        logger.warning(
+            "assistant.provider_failure operation=%s category=%s exception_type=%s",
+            exc.failure.operation,
+            exc.failure.category,
+            type(exc.cause).__name__ if exc.cause else "unknown",
+        )
+        raise ChatServiceError(str(exc)) from exc
     except Exception as exc:
+        logger.error(
+            "assistant.request_failed exception_type=%s",
+            type(exc).__name__,
+        )
         raise ChatServiceError("Unable to complete the assistant request right now.") from exc
 
     response = state.get("assistant_response")

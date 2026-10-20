@@ -82,7 +82,7 @@ The application shall:
 * Allow users to ask questions about how to use the application.
 * Allow users to ask questions requiring both portfolio and document information.
 * Allow the AI assistant to retrieve relevant portfolio information through controlled application functions.
-* Allow the AI assistant to retrieve relevant document information through Chroma.
+* Allow the AI assistant to retrieve relevant document information through the configured vector-store provider.
 * Allow the AI assistant to choose the needed capability through tool calling rather than keyword-based routing.
 * Display current holdings.
 * Display demat account-wise portfolio summaries.
@@ -158,7 +158,7 @@ The high-level architecture shall be:
                |                          |
                |                      Service Layer
                |                          |
-               |                         Chroma
+               |                 Chroma or Pinecone
                |                          |
                +--------------------------+
                                        |
@@ -238,15 +238,20 @@ The relational database shall store structured application data such as:
 
 ## Vector Database
 
-* Chroma
+The application shall support configurable vector-store providers through `VECTOR_STORE_PROVIDER`.
 
-Chroma shall store:
+Supported providers shall include:
+
+* Chroma for local development and testing.
+* Pinecone for hosted deployments such as Render.
+
+The configured vector store shall store:
 
 * Processed document chunks
 * Embeddings
 * Retrieval metadata
 
-Chroma shall be used for semantic retrieval of financial-document information.
+The configured vector store shall be used for semantic retrieval of financial-document information.
 
 ## AI
 
@@ -254,7 +259,7 @@ Chroma shall be used for semantic retrieval of financial-document information.
 * LangChain
 * LangChain Core
 * LangChain OpenAI integration
-* LangChain Chroma integration
+* Chroma and Pinecone integrations
 * LangGraph
 
 ## Automated Testing
@@ -326,7 +331,7 @@ The AI layer shall configure chat and embedding providers independently. Chat AP
 * AI tools shall read authenticated user and active chat context from trusted server-side state.
 * Document retrieval shall be restricted by user and chat ownership.
 * MCP clients shall select chats using public `conversation_id` UUIDs, never internal integer chat IDs.
-* Chroma metadata shall contain sufficient information to prevent cross-user and cross-chat retrieval.
+* The configured vector store metadata shall contain sufficient information to prevent cross-user and cross-chat retrieval.
 * AI tools shall not perform destructive database operations.
 
 ---
@@ -367,7 +372,7 @@ The current codebase has implemented the following:
 * delayed, one-time chat title generation after the first non-greeting message
 * document upload, validation, and deletion
 * PDF page-level extraction and metadata-preserving chunking
-* RAG storage in Chroma with user/chat ownership metadata
+* RAG storage in the configured vector store with user/chat ownership metadata
 * application help content for usage questions
 * a tool-calling assistant architecture with trusted user/chat context
 * a standalone STDIO MCP server for shared portfolio and document-search tools
@@ -666,7 +671,7 @@ During processing, the temporary document shall be:
 2. Checked for relevance.
 3. Chunked.
 4. Converted into embeddings.
-5. Stored in Chroma with required metadata.
+5. Stored in the configured vector store with required metadata.
 
 Only after successful ingestion shall the original temporary document be deleted.
 
@@ -678,7 +683,7 @@ The system shall retain the processed information required for future retrieval.
 
 # Document Relevance Validation
 
-The system shall check whether an uploaded document is relevant to the application's intended financial-document scope before adding it to Chroma.
+The system shall check whether an uploaded document is relevant to the application's intended financial-document scope before adding it to the configured vector store.
 
 The relevance check shall identify whether the document is related to areas such as:
 
@@ -720,7 +725,7 @@ Result:
 NOT RELEVANT
 ```
 
-The document shall not be added to Chroma.
+The document shall not be added to the configured vector store.
 
 The temporary uploaded file shall be deleted after rejection.
 
@@ -743,7 +748,7 @@ Text Chunking
        ↓
 Embeddings
        ↓
-Chroma Vector Database
+Configured Vector Database
 ```
 
 When a user asks a document-related question:
@@ -753,7 +758,7 @@ User Question
        ↓
 Question Embedding
        ↓
-Chroma Similarity Search
+Configured Vector Similarity Search
        ↓
 Relevant Document Chunks
        ↓
@@ -766,7 +771,7 @@ Response
 
 Only documents belonging to the current authenticated user's chat shall be considered.
 
-Chroma metadata shall allow retrieval to be filtered by:
+Vector-store metadata shall allow retrieval to be filtered by:
 
 * User
 * Chat
@@ -778,11 +783,11 @@ The assistant shall use retrieved document chunks as context when answering docu
 
 # Vector Database Design
 
-Chroma shall store processed information required for document retrieval.
+The configured vector store shall store processed information required for document retrieval.
 
 Each document shall be divided into chunks before embeddings are generated.
 
-Chroma shall store:
+The configured vector store shall store:
 
 * Document chunks.
 * Embeddings.
@@ -800,7 +805,7 @@ Metadata shall include, where appropriate:
 
 The original uploaded document shall not be stored permanently.
 
-Chroma shall not replace the relational database as the system of record for application data.
+The configured vector store shall not replace the relational database as the system of record for application data.
 
 ---
 
@@ -808,7 +813,7 @@ Chroma shall not replace the relational database as the system of record for app
 
 When a user deletes a document from a chat:
 
-1. The document's associated vectors/chunks shall be deleted from Chroma.
+1. The document's associated vectors/chunks shall be deleted from the configured vector store.
 2. The document's metadata shall be deleted from the relational database.
 
 No orphaned vectors belonging to the deleted document should remain available for retrieval.
@@ -821,7 +826,7 @@ When a user deletes a chat:
 
 1. All messages belonging to the chat shall be deleted from the relational database.
 2. All document metadata belonging to the chat shall be deleted from the relational database.
-3. All Chroma chunks and embeddings belonging to the chat shall be deleted.
+3. All vector-store chunks and embeddings belonging to the chat shall be deleted.
 4. The chat record shall be deleted from the relational database.
 
 After deletion, the assistant shall not be able to retrieve information from the deleted chat or its documents.
@@ -1182,12 +1187,12 @@ for each demat account.
 18. Document retrieval must respect user and chat ownership.
 19. AI portfolio tools must operate within the authenticated user's context.
 20. AI tools shall not perform destructive portfolio operations.
-21. Document ingestion shall perform a relevance check before adding a document to Chroma.
-22. Documents classified as irrelevant shall not be added to Chroma.
+21. Document ingestion shall perform a relevance check before adding a document to the configured vector store.
+22. Documents classified as irrelevant shall not be added to the configured vector store.
 23. Original uploaded files shall be deleted after successful RAG ingestion.
 24. Failed document processing shall not result in premature deletion of the temporary file.
-25. Deleting a document shall remove its metadata from the relational database and its vectors/chunks from Chroma.
-26. Deleting a chat shall remove its messages and metadata from the relational database and all associated vectors/chunks from Chroma.
+25. Deleting a document shall remove its metadata from the relational database and its vectors/chunks from the configured vector store.
+26. Deleting a chat shall remove its messages and metadata from the relational database and all associated vectors/chunks from the configured vector store.
 27. The assistant shall use relevant context rather than automatically including all available context.
 28. RAG responses shall use retrieved document context when the question requires information from uploaded documents.
 29. The assistant shall not invent unavailable numerical risk information.
@@ -1335,9 +1340,9 @@ No permanent file path is required because the original document is deleted afte
 
 ---
 
-# Chroma Metadata
+# Vector-Store Metadata
 
-Each processed document chunk stored in Chroma shall contain metadata sufficient to identify and authorize the source.
+Each processed document chunk stored in the configured vector store shall contain metadata sufficient to identify and authorize the source.
 
 Metadata shall include, where appropriate:
 
@@ -1392,7 +1397,7 @@ The metadata shall allow retrieval to be restricted to the current user's chat a
 * Only supported document formats shall be accepted.
 * The document must have a valid filename.
 * The document must pass the financial-document relevance check before RAG ingestion.
-* Documents that fail relevance validation shall not be stored in Chroma.
+* Documents that fail relevance validation shall not be stored in the configured vector store.
 * Documents that fail processing shall not be considered successfully ingested.
 
 ---
@@ -1539,7 +1544,7 @@ The project shall be considered complete when:
 * Irrelevant documents are rejected.
 * Relevant documents are processed using RAG.
 * Documents are chunked and converted into embeddings.
-* Document chunks and embeddings are stored in Chroma.
+* Document chunks and embeddings are stored in the configured vector store.
 * Original uploaded files are deleted after successful ingestion.
 * Users can ask questions about their uploaded financial documents.
 * The assistant can retrieve relevant document information using RAG.
@@ -1555,8 +1560,8 @@ The project shall be considered complete when:
 * The assistant can handle relevant multi-document questions.
 * The assistant can understand relevant follow-up questions using conversation history.
 * The assistant does not retrieve another user's portfolio or documents.
-* Deleting a document removes its associated Chroma data.
-* Deleting a chat removes its messages and metadata from the relational database and its associated vectors/chunks from Chroma.
+* Deleting a document removes its associated vector-store data.
+* Deleting a chat removes its messages and metadata from the relational database and its associated vectors/chunks from the configured vector store.
 * The assistant does not answer unrelated questions merely because an unrelated document was uploaded.
 * The assistant does not invent unavailable numerical risk information.
 * The assistant does not provide financial advice or investment recommendations.
@@ -1569,6 +1574,6 @@ The project shall be considered complete when:
 * Users can view demat account-wise summaries.
 * Users can view portfolio summaries.
 * All structured application data is stored in the configured relational database.
-* Chroma stores processed document information required for semantic retrieval.
+* The configured vector store stores processed document information required for semantic retrieval.
 * Foreign key relationships are enforced.
 * The application is accessible and usable with NVDA.

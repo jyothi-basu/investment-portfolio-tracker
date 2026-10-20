@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, mock_open
 
 from app.services import document_service
+from app.ai.provider_errors import AIProviderError, classify_provider_failure
 
 
 class TestUploadBoundary:
@@ -54,4 +55,32 @@ class TestUploadBoundary:
 
         assert result == (False, "Unable to process the uploaded document.", 42)
         log_exception.assert_called_once()
+        assert "FAILED" in [call.args[2] for call in update_status.call_args_list]
+
+    def test_embedding_quota_failure_marks_document_failed_with_safe_message(self):
+        uploaded = Mock(filename="report.txt")
+        uploaded.file = BytesIO(b"financial report")
+        provider_error = AIProviderError(
+            classify_provider_failure(
+                RuntimeError("resource exhausted"),
+                operation="embeddings",
+            )
+        )
+
+        with patch.object(document_service, "UPLOAD_DIR", Path("test-upload-dir")), \
+                    patch.object(document_service, "_ensure_upload_dir"), \
+                    patch.object(document_service.Path, "open", mock_open()), \
+                    patch.object(document_service.shutil, "copyfileobj"), \
+                    patch.object(document_service.Path, "unlink"), \
+                    patch.object(document_service.db, "fetch_chat", return_value={"chat_id": 5}), \
+                    patch.object(document_service.db, "create_document", return_value=43), \
+                    patch.object(document_service.db, "update_document_status") as update_status, \
+                    patch.object(document_service, "load_document_text", return_value="financial report"), \
+                    patch.object(document_service, "classify_document_relevance", return_value={"relevant": True}), \
+                    patch.object(document_service, "chunk_text", return_value=[{"text": "financial report", "metadata": {}}]), \
+                    patch.object(document_service, "add_document_chunks", side_effect=provider_error), \
+                    patch.object(document_service, "delete_document_chunks"):
+                result = document_service.upload_document(5, 7, uploaded)
+
+        assert result == (False, provider_error.failure.user_message, 43)
         assert "FAILED" in [call.args[2] for call in update_status.call_args_list]

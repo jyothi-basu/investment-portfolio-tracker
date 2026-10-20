@@ -7,6 +7,7 @@ import shutil
 from werkzeug.utils import secure_filename
 
 from app.ai.rag import add_document_chunks, chunk_text, classify_document_relevance, delete_document_chunks, load_document_text
+from app.ai.provider_errors import AIProviderError
 from app.repository import db
 
 
@@ -120,6 +121,20 @@ def upload_document(chat_id, user_id, uploaded_file):
         )
         db.update_document_status(document_id, user_id, "COMPLETED")
         file_path.unlink(missing_ok=True)
+    except AIProviderError as exc:
+        logger.warning(
+            "document.ingestion_provider_failure document_id=%s user_id=%s chat_id=%s category=%s",
+            document_id,
+            user_id,
+            chat_id,
+            exc.failure.category,
+        )
+        db.update_document_status(document_id, user_id, "FAILED")
+        try:
+            delete_document_chunks(document_id, user_id)
+        except Exception:
+            logger.exception("document.cleanup_failed document_id=%s", document_id)
+        return False, str(exc), document_id
     except Exception:
         logger.exception(
             "document.ingestion_failed document_id=%s user_id=%s chat_id=%s filename=%s",

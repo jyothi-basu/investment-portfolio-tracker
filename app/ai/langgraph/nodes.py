@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from sqlalchemy.exc import OperationalError
 
 from app.ai.provider_factory import build_chat_model, get_chat_provider_settings
+from app.ai.provider_errors import AIProviderError, raise_provider_error
 from app.ai.prompts import format_citations
 from app.ai.tools import ToolExecutionResult, execute_tool_call, get_assistant_tools, get_tool_spec
 from app.services import chat_service
@@ -68,9 +69,16 @@ def agent_node(state: PortfolioAssistantState) -> dict[str, Any]:
     node selects tools or produces a final response; it never executes tools.
     """
 
-    settings = get_chat_provider_settings(default_model=DEFAULT_MODEL)
-    model = build_chat_model(default_model=DEFAULT_MODEL, temperature=0.4, max_tokens=MAX_RESPONSE_TOKENS)
-    response = model.bind_tools(get_assistant_tools()).invoke(state.get("messages", []))
+    try:
+        settings = get_chat_provider_settings(default_model=DEFAULT_MODEL)
+        model = build_chat_model(
+            default_model=DEFAULT_MODEL,
+            temperature=0.4,
+            max_tokens=MAX_RESPONSE_TOKENS,
+        )
+        response = model.bind_tools(get_assistant_tools()).invoke(state.get("messages", []))
+    except Exception as exc:
+        raise_provider_error(exc, operation="llm")
     tool_calls = [_normalise_tool_call(call) for call in (getattr(response, "tool_calls", None) or [])]
     if tool_calls and (state.get("tool_rounds") or 0) >= MAX_TOOL_ROUNDS:
         raise RuntimeError("The assistant could not complete the request after multiple tool calls.")
@@ -102,6 +110,8 @@ def _execute_tool(tool_call: dict[str, Any], retryable: bool) -> dict[str, Any]:
                 content, citations = str(result), []
             return {"tool_call_id": tool_id, "name": tool_name, "status": "completed", "content": content, "citations": citations}
         except Exception as exc:
+            if isinstance(exc, AIProviderError):
+                raise
             last_error = exc
             if attempt + 1 >= attempts or not _is_transient_failure(exc):
                 break

@@ -237,13 +237,13 @@ def get_chat_provider_settings(*, default_model=DEFAULT_CHAT_MODEL) -> ProviderS
 
 
 def build_embeddings_model(*, default_model=DEFAULT_EMBEDDING_MODEL):
-    """Create the configured embedding model for Chroma ingestion and retrieval."""
+    """Create the configured embedding model for document ingestion and retrieval."""
 
     return create_embedding_model(default_model=default_model)
 
 
 def create_embedding_model(*, default_model=DEFAULT_EMBEDDING_MODEL):
-    """Create the configured embedding model for Chroma ingestion and retrieval."""
+    """Create the configured embedding model for document ingestion and retrieval."""
 
     settings = _read_embedding_settings(default_model=default_model)
 
