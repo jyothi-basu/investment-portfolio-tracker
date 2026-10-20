@@ -21,21 +21,6 @@ The current implementation includes:
 
 This project demonstrates Python backend engineering, database design, and AI orchestration.
 
-## Live Deployment
-
-The application is deployed and available at:
-
-[portfolio-tracker.jyothibasu.com](https://portfolio-tracker.jyothibasu.com)
-
-Production deployment stack:
-
-- FastAPI hosted on Render
-- PostgreSQL hosted on AlwaysData
-- Pinecone for hosted vector search
-- Gemini for chat generation and document embeddings
-
-The application can still be run locally with Chroma, PostgreSQL, and any supported AI providers by changing the environment configuration.
-
 ## Portfolio Project Focus
 
 This repository is designed to demonstrate the skills expected from a Python backend developer who integrates AI into existing applications:
@@ -49,7 +34,7 @@ This repository is designed to demonstrate the skills expected from a Python bac
 
 ### Engineering Ownership
 
-The system architecture, requirements, technology choices, security boundaries, provider strategy, and deployment design were planned by the author. AI-assisted development was used to implement and refine the code against the project's SRS. The author reviewed the generated code, separated concerns into routes, services, repositories, and provider adapters, tested the behavior, and deployed the application.
+The system architecture, requirements, technology choices, security boundaries, provider strategy, and deployment design were planned by the author. AI-assisted development was used to implement and refine the code against the project's SRS. The author reviewed the generated code, separated concerns into routes, services, repositories, and provider adapters, and tested the behavior.
 
 ## What This App Does
 
@@ -320,7 +305,7 @@ cp .env.example .env
 
 For local HTTP development, keep `JWT_COOKIE_SECURE=false` and `SESSION_COOKIE_SECURE=false`. Set both to `true` when the application is served over HTTPS in production.
 
-The live deployment uses Render for the FastAPI web service, AlwaysData for PostgreSQL, Pinecone for document vectors, and Gemini for the LLM and embedding providers. Production credentials are configured through the hosting providers and are not stored in this repository.
+For a hosted deployment, Render can run the FastAPI web service, a managed PostgreSQL provider can host the relational database, Pinecone can provide hosted document vectors, and Gemini can provide the LLM and embedding services. Credentials should be configured through environment variables and must not be stored in this repository.
 
 Generate each secret independently:
 
@@ -529,9 +514,9 @@ Vector stores are selected independently with `VECTOR_STORE_PROVIDER`:
 | Provider value | Implementation | Recommended use |
 | --- | --- | --- |
 | `chroma` | Local persistent Chroma collection | Local development and testing |
-| `pinecone` | Pinecone hosted vector index | Render or other hosted deployments |
+| `pinecone` | Pinecone hosted vector index | Hosted deployments |
 
-Pinecone requires `PINECONE_API_KEY`, `PINECONE_INDEX_NAME` (or `PINECONE_INDEX_HOST`), and `PINECONE_NAMESPACE`. The Pinecone index dimension and metric must match the configured embedding model. The default local configuration uses Chroma; the deployed configuration uses Pinecone so it does not depend on Render's ephemeral filesystem.
+Pinecone requires `PINECONE_API_KEY`, `PINECONE_INDEX_NAME` (or `PINECONE_INDEX_HOST`), and `PINECONE_NAMESPACE`. The Pinecone index dimension and metric must match the configured embedding model. The default local configuration uses Chroma; Pinecone is available when a hosted vector store is preferred.
 
 For chat, `LLM_API_KEY` falls back to `OPENAI_API_KEY`. For embeddings, the key lookup order is `EMBEDDINGS_API_KEY`, `LLM_API_KEY`, then `OPENAI_API_KEY`. OpenAI-compatible chat and embedding providers require their respective base URL settings. Local Ollama is a development/testing choice, not a separate provider value; it uses `LLM_PROVIDER=openai-compatible`.
 
@@ -550,7 +535,7 @@ LLM_API_KEY=ollama
 LLM_BASE_URL=http://localhost:11434/v1
 ```
 
-The non-empty `LLM_API_KEY` is required by the OpenAI-compatible client; Ollama's local endpoint ignores its value. The application calls the Ollama server, which runs the model locally. This is a development/testing setup only: this project's Render deployment is not configured to reach a developer machine's `localhost` Ollama server. Keep the production LLM configuration pointed at a provider reachable from the deployed application.
+The non-empty `LLM_API_KEY` is required by the OpenAI-compatible client; Ollama's local endpoint ignores its value. The application calls the Ollama server, which runs the model locally. This is a development/testing setup only. For a hosted deployment, configure the LLM provider with an endpoint reachable from the hosting environment.
 
 The assistant uses a tool-calling flow:
 
@@ -656,7 +641,7 @@ The main tables are:
 
 The application creates the mapped tables during startup for now. Alembic will replace startup schema creation once the migration baseline is added.
 
-Uploaded document chunks are stored in the configured vector store with user/chat ownership metadata and page numbers for PDF documents. Chroma is used locally; Pinecone is used for the Render deployment.
+Uploaded document chunks are stored in the configured vector store with user/chat ownership metadata and page numbers for PDF documents. Chroma is suitable for local development; Pinecone is available for hosted deployments.
 
 ### AI Assistant
 
