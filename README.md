@@ -21,9 +21,24 @@ The current implementation includes:
 
 This project demonstrates Python backend engineering, database design, and AI orchestration.
 
+## Live Deployment
+
+The application is deployed and available at:
+
+[portfolio-tracker.jyothibasu.com](https://portfolio-tracker.jyothibasu.com)
+
+Production deployment stack:
+
+- FastAPI hosted on Render
+- PostgreSQL hosted on AlwaysData
+- Pinecone for hosted vector search
+- Gemini for chat generation and document embeddings
+
+The application can still be run locally with Chroma, PostgreSQL, and any supported AI providers by changing the environment configuration.
+
 ## Portfolio Project Focus
 
-This repository is designed to demonstrate the skills expected from a remote Python backend developer who integrates AI into existing applications:
+This repository is designed to demonstrate the skills expected from a Python backend developer who integrates AI into existing applications:
 
 - production-style FastAPI routing with service and repository boundaries
 - secure JWT and PAT authentication with user-scoped access control
@@ -31,6 +46,10 @@ This repository is designed to demonstrate the skills expected from a remote Pyt
 - reusable AI and MCP tools integrated with existing backend services
 - RAG ingestion, retrieval, source citations, and per-chat isolation
 - automated pytest coverage for authentication, MCP, AI tools, LangGraph, RAG, and upload boundaries
+
+### Engineering Ownership
+
+The system architecture, requirements, technology choices, security boundaries, provider strategy, and deployment design were planned by the author. AI-assisted development was used to implement and refine the code against the project's SRS. The author reviewed the generated code, separated concerns into routes, services, repositories, and provider adapters, tested the behavior, and deployed the application.
 
 ## What This App Does
 
@@ -181,6 +200,7 @@ investment_portfolio_tracker/
 │   │   ├── orchestrator.py
 │   │   ├── prompts.py
 │   │   ├── provider_factory.py
+│   │   ├── provider_errors.py
 │   │   ├── tools/
 │   │   │   ├── __init__.py
 │   │   │   ├── application.py
@@ -190,9 +210,13 @@ investment_portfolio_tracker/
 │   │   │   └── registry.py
 │   │   └── rag/
 │   │       ├── __init__.py
+│   │       ├── chunk_utils.py
+│   │       ├── chroma_store.py
 │   │       ├── chunker.py
 │   │       ├── embeddings.py
+│   │       ├── errors.py
 │   │       ├── loader.py
+│   │       ├── pinecone_store.py
 │   │       ├── retriever.py
 │   │       ├── validator.py
 │   │       └── vector_store.py
@@ -256,14 +280,24 @@ investment_portfolio_tracker/
 │   ├── account_summary.html
 │   └── portfolio_summary.html
 └── tests/
+    ├── database_helpers.py
     ├── test_ai_tools_architecture.py
+    ├── test_auth_repository.py
+    ├── test_chat_repository.py
+    ├── test_database_infrastructure.py
     ├── test_embedding_provider_factory.py
     ├── test_jwt_auth.py
     ├── test_langgraph_architecture.py
     ├── test_mcp_auth.py
     ├── test_mcp_sessions.py
+    ├── test_portfolio_repository.py
+    ├── test_provider_errors.py
     ├── test_rag_unit.py
-    └── test_upload_boundary.py
+    ├── test_repository_contracts.py
+    ├── test_repository_session.py
+    ├── test_sqlalchemy_facade.py
+    ├── test_upload_boundary.py
+    └── test_vector_store.py
 ```
 
 ### Setup Instructions
@@ -285,6 +319,8 @@ cp .env.example .env
 ```
 
 For local HTTP development, keep `JWT_COOKIE_SECURE=false` and `SESSION_COOKIE_SECURE=false`. Set both to `true` when the application is served over HTTPS in production.
+
+The live deployment uses Render for the FastAPI web service, AlwaysData for PostgreSQL, Pinecone for document vectors, and Gemini for the LLM and embedding providers. Production credentials are configured through the hosting providers and are not stored in this repository.
 
 Generate each secret independently:
 
